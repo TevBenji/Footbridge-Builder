@@ -1,0 +1,25 @@
+reference/
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+TestResults/
+*.trx
+*.nupkg
+*.snupkg
+.dotnet/
+.nuget/
+.tmp/
+node_modules/
+src/FootbridgeBuilder.UI/build/
+gallery/
+
+# Kept locally, not published: design notes, the test suite and the dev-only game runner
+docs/
+tests/
+tools/dev/
+src/FootbridgeBuilder/Dev/
