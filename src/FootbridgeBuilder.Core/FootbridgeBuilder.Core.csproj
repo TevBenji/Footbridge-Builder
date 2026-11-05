@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\..\build\GameReferences.props" />
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Version>0.1.0</Version>
+    <Nullable>disable</Nullable>
+    <RootNamespace>FootbridgeBuilder.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The planner's stages are internal; the off-game tests check them directly. -->
+    <InternalsVisibleTo Include="FootbridgeBuilder.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Unity.Mathematics">
+      <HintPath>$(ManagedPath)\Unity.Mathematics.dll</HintPath>
+      <Private>false</Private>
+      <!-- Keep UnityEngine dependencies out of the planner's compiler references. -->
+      <ExternallyResolved>true</ExternallyResolved>
+    </Reference>
+  </ItemGroup>
+</Project>

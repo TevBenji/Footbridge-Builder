@@ -1,0 +1,25 @@
+<Publish>
+	<!--Empty for the first upload. The publisher prints "Mod published with Id=NNNNNN": it goes here, or the next upload makes a second listing-->
+	<ModId Value="" />
+	<DisplayName Value="Footbridge Builder" />
+	<ShortDescription Value="Hover a road and click: a working pedestrian bridge appears, at the right height, joined to the sidewalks." />
+	<!--Every upload sends exactly this page: change it here, not on the website, or the next upload overwrites the website-->
+	<LongDescription>
+Hover a road and click. Footbridge Builder puts a working pedestrian bridge over it: the right height, ramps that fit, joined to the sidewalks. No other mods needed.
+
+Built for game version **1.6.***.
+
+### Credits
+
+Parts of the build code are adapted from **Placemaker** by jackwrichards (GPL-3.0), which in turn credits ParkManager and Grid Road Generator. Inspired by kianzarrin's Automatic Pedestrian Bridge Builder for the first game. Footbridge Builder is GPL-3.0 too; the full source is on GitHub (link on this page).
+	</LongDescription>
+	<!--A missing picture is silently replaced by a default one-->
+	<Thumbnail Value="Properties/Thumbnail.png" />
+	<Tag Value="Code Mod" />
+	<ModVersion Value="0.1.0" />
+	<GameVersion Value="1.6.*" />
+	<ChangeLog Value="First release." />
+	<ExternalLink Type="github" Url="https://github.com/TevBenji/Footbridge-Builder" />
+	<!--Public, Unlisted or Private, exactly as written-->
+	<AccessLevel Value="Public" />
+</Publish>
