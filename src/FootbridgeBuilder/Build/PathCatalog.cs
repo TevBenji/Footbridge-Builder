@@ -76,6 +76,8 @@ namespace FootbridgeBuilder.Build
                             MaxEdgeLength = geometry.m_EdgeLengthRange.max > 1f ? geometry.m_EdgeLengthRange.max : 200f,
                             MaxElevation = placeable.m_ElevationRange.max,
                             MaxSpan = geometry.m_ElevatedLength > 1f ? geometry.m_ElevatedLength * 0.9f : 1000f,
+                            HeightRange = geometry.m_ElevatedHeightRange.max > geometry.m_ElevatedHeightRange.min
+                                ? new float2(geometry.m_ElevatedHeightRange.min, geometry.m_ElevatedHeightRange.max) : new float2(-1f, 2f),
                         },
                     });
                 }
@@ -83,7 +85,11 @@ namespace FootbridgeBuilder.Build
             return result;
         }
 
-        /// <summary>The game's unlocked pedestrian bridges (Arc, Cable Stayed, Covered), shortest reach first.</summary>
+        /// <summary>
+    /// The game's unlocked pedestrian bridges that span a road in one go (Arc and Covered), shortest reach first. One with
+    /// pillars in the middle (Cable Stayed) would stand its tower in the traffic: the game refused it over a large road in the
+    /// test city (5 November 2026).
+    /// </summary>
         public static List<DeckBridge> Bridges(EntityManager entities, PrefabSystem prefabs)
         {
             var result = new List<DeckBridge>();
@@ -97,6 +103,7 @@ namespace FootbridgeBuilder.Build
                     try { name = prefabs.GetPrefab<PrefabBase>(prefab)?.name; } catch (Exception) { continue; }
                     if (string.IsNullOrEmpty(name) || name.IndexOf("Pedestrian Bridge", StringComparison.OrdinalIgnoreCase) < 0) continue;
                     var geometry = entities.GetComponentData<NetGeometryData>(prefab);
+                    if ((geometry.m_Flags & Game.Net.GeometryFlags.MiddlePillars) != 0) continue;
                     result.Add(new DeckBridge { Name = name, Prefab = prefab, Shortest = geometry.m_EdgeLengthRange.min, Longest = math.min(geometry.m_EdgeLengthRange.max, geometry.m_ElevatedLength * 0.9f) });
                 }
             result.Sort((a, b) => a.Longest != b.Longest ? a.Longest.CompareTo(b.Longest) : string.CompareOrdinal(a.Name, b.Name));

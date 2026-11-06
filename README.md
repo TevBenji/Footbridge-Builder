@@ -58,8 +58,8 @@ In the game:
   cims more than the bridge.
 - **Buildings left standing.** If a ramp would hit a building, the bridge tries other shapes, then moves along the road.
   Only when nothing fits does it work like the game's road tool, and the button says so: **Build and replace 2 buildings**.
-- **Wide roads.** A footpath spans about 36 m. Over a wider road the game's own arch or cable-stayed pedestrian bridge
-  carries the deck.
+- **Wide roads.** A footpath spans about 36 m. Over a wider road the game's own arch or covered pedestrian bridge
+  carries the deck, up to about 40 m. (The cable-stayed one is left out: its tower would stand in the traffic.)
 
 <table>
 <tr>
@@ -169,8 +169,8 @@ own height. The game draws the preview, prices it, builds it on your click, and 
 ## Known limitations
 
 - Version 1 bridges one road at a time. Junctions, roundabouts, tunnels, rail and water are planned for later.
-- Squeezed between bridges already there, a plan can still overlap them in ways only the game sees. The outline turns red,
-  the panel names the game's reason, and nothing is built.
+- The game has the last word. If it refuses part of a bridge the planner thought would fit, the outline turns red, the
+  panel names the game's reason, and nothing is built.
 - The game has no walkable stairs or lifts, so every design uses ramps.
 - A crosswalk removed is still an unsafe crossing in the game, so some cims will run across. No mod setting changes
   city-wide pathfinding; if you want cims to never jaywalk, a mod like Stop Jaywalking does that.

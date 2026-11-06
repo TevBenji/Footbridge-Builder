@@ -37,6 +37,8 @@ namespace FootbridgeBuilder.Core
         public float MaxElevation = 20f;
         /// <summary>The longest deck the game lets span unsupported (the path's own, or a pedestrian bridge's when one is available).</summary>
         public float MaxSpan = 1000f;
+        /// <summary>The space a raised piece takes up below and above its surface (the game's elevated height range).</summary>
+        public float2 HeightRange = new float2(-1f, 2f);
     }
 
     /// <summary>Something on the ground the bridge must respect, as a four-cornered outline.</summary>
@@ -46,6 +48,11 @@ namespace FootbridgeBuilder.Core
         public ObstacleKind Kind;
         /// <summary>For nets: the height of the net's surface.</summary>
         public float Surface;
+        /// <summary>
+        /// For nets: the space it takes up below and above its surface (the game's height range). Left as NaN, the net is taken
+        /// as a road: a piece clears it only with the request's clearance over its surface.
+        /// </summary>
+        public float Below = float.NaN, Above = float.NaN;
         public long Id;
     }
 
@@ -123,6 +130,8 @@ namespace FootbridgeBuilder.Core
         /// <summary>The street crossing that competes hardest after the build, 0 when none.</summary>
         public long CompetingCrossing;
         public bool CompetingMarked;
+        /// <summary>How far along the road from the bridge that crossing is.</summary>
+        public float CompetingDistance;
         public readonly List<long> BuildingsToReplace = new List<long>();
         public readonly List<string> Messages = new List<string>();
         /// <summary>For the log, not the player: what stopped each side when nothing fits (obstacle kind, id, heights).</summary>

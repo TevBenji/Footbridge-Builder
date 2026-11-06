@@ -64,7 +64,9 @@ namespace FootbridgeBuilder.Tool
         private readonly int columns, rows;
         private readonly float[] heights;
         public readonly List<(Obstacle Outline, Entity Entity)> Buildings = new List<(Obstacle, Entity)>();
-        public readonly List<(Entity Edge, float3[] Points, float Width)> Nets = new List<(Entity, float3[], float)>();
+        public readonly List<(Entity Edge, float3[] Points, float Width, float2 Range)> Nets = new List<(Entity, float3[], float, float2)>();
+        /// <summary>The pillars under raised nets already built: a ramp can't pass through one.</summary>
+        public readonly List<Obstacle> Pillars = new List<Obstacle>();
         public readonly List<Obstacle> Water = new List<Obstacle>();
         /// <summary>Junctions (three roads or paths or more): their corners reach past the edges' own outlines.</summary>
         public readonly List<Obstacle> Junctions = new List<Obstacle>();
@@ -124,11 +126,14 @@ namespace FootbridgeBuilder.Tool
                     Entity composition = entities.GetComponentData<Composition>(edge).m_Edge;
                     if (!entities.HasComponent<NetCompositionData>(composition)) continue;
                     var data = entities.GetComponentData<NetCompositionData>(composition);
-                    if ((data.m_Flags.m_General & CompositionFlags.General.Tunnel) != 0 || data.m_Width <= 0f) continue;
+                    // Only nets the game would compare with a footpath: it skips those with no layer in common (tunnels,
+                    // underground pipes and invisible markers).
+                    var layers = NetUtils.GetCollisionMask(data, true);
+                    if ((layers & (CollisionMask.OnGround | CollisionMask.Overground)) == 0 || data.m_Width <= 0f) continue;
                     int segments = math.max(1, (int)math.ceil(curve.m_Length / 4f));
                     var points = new float3[segments + 1];
                     for (int index = 0; index <= segments; index++) points[index] = MathUtils.Position(curve.m_Bezier, index / (float)segments);
-                    Nets.Add((edge, points, data.m_Width));
+                    Nets.Add((edge, points, data.m_Width, new float2(data.m_HeightRange.min, data.m_HeightRange.max)));
                 }
 
             using (var query = entities.CreateEntityQuery(ComponentType.ReadOnly<Node>(), ComponentType.ReadOnly<ConnectedEdge>(),
@@ -141,13 +146,19 @@ namespace FootbridgeBuilder.Tool
                     var edges = entities.GetBuffer<ConnectedEdge>(node, true);
                     if (edges.Length < 3) continue;
                     float widest = 0f;
+                    // The space the junction takes up: as low and as high as any road that meets there.
+                    float2 range = new float2(float.MaxValue, float.MinValue);
                     float2 along = new float2(1f, 0f);
                     bool turned = false;
                     foreach (var connected in edges)
                     {
                         if (entities.HasComponent<Composition>(connected.m_Edge)
                             && entities.HasComponent<NetCompositionData>(entities.GetComponentData<Composition>(connected.m_Edge).m_Edge))
-                            widest = math.max(widest, entities.GetComponentData<NetCompositionData>(entities.GetComponentData<Composition>(connected.m_Edge).m_Edge).m_Width);
+                        {
+                            var data = entities.GetComponentData<NetCompositionData>(entities.GetComponentData<Composition>(connected.m_Edge).m_Edge);
+                            widest = math.max(widest, data.m_Width);
+                            range = new float2(math.min(range.x, data.m_HeightRange.min), math.max(range.y, data.m_HeightRange.max));
+                        }
                         // Squared to the first road that meets here, so on a road at an angle its corners stay where the junction's are.
                         if (turned || !entities.HasComponent<Curve>(connected.m_Edge) || !entities.HasComponent<Edge>(connected.m_Edge)) continue;
                         var bezier = entities.GetComponentData<Curve>(connected.m_Edge).m_Bezier;
@@ -158,8 +169,37 @@ namespace FootbridgeBuilder.Tool
                     }
                     float half = widest * 0.5f + 3f;
                     float2 at = position.xz, x = along * half, z = new float2(-along.y, along.x) * half;
+                    bool known = range.x <= range.y;
                     Junctions.Add(new Obstacle { A = at - x - z, B = at + x - z, C = at + x + z, D = at - x + z,
-                        Kind = ObstacleKind.Net, Surface = position.y, Id = Pack(node) });
+                        Kind = ObstacleKind.Net, Surface = position.y, Below = known ? range.x : float.NaN, Above = known ? range.y : float.NaN, Id = Pack(node) });
+                }
+
+            // Pillars under raised nets: from the ground up to the net they hold.
+            using (var query = entities.CreateEntityQuery(ComponentType.ReadOnly<Game.Objects.Transform>(), ComponentType.ReadOnly<PrefabRef>(),
+                ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Temp>(), ComponentType.Exclude<Deleted>()))
+            using (var found = query.ToEntityArray(Allocator.Temp))
+            using (var transforms = query.ToComponentDataArray<Game.Objects.Transform>(Allocator.Temp))
+            using (var prefabs = query.ToComponentDataArray<PrefabRef>(Allocator.Temp))
+                for (int index = 0; index < found.Length; index++)
+                {
+                    var transform = transforms[index];
+                    if (math.any(transform.m_Position.xz < low) || math.any(transform.m_Position.xz > high)) continue;
+                    Entity prefab = prefabs[index].m_Prefab;
+                    if (!entities.HasComponent<PillarData>(prefab)) continue;
+                    float2 size = entities.HasComponent<ObjectGeometryData>(prefab) ? entities.GetComponentData<ObjectGeometryData>(prefab).m_Size.xz : float2.zero;
+                    var corners = Game.Objects.ObjectUtils.CalculateBaseCorners(transform.m_Position, transform.m_Rotation, math.max(size, new float2(1f, 1f)));
+                    // Its top: where it stands or the net it holds, whichever is higher.
+                    float top = transform.m_Position.y;
+                    Entity owner = entities.GetComponentData<Owner>(found[index]).m_Owner;
+                    if (entities.HasComponent<Node>(owner)) top = math.max(top, entities.GetComponentData<Node>(owner).m_Position.y);
+                    else if (entities.HasComponent<Curve>(owner))
+                    {
+                        var bezier = entities.GetComponentData<Curve>(owner).m_Bezier;
+                        top = math.max(top, math.max(bezier.a.y, bezier.d.y));
+                    }
+                    float ground = Ground(transform.m_Position.xz);
+                    Pillars.Add(new Obstacle { A = corners.a.xz, B = corners.b.xz, C = corners.c.xz, D = corners.d.xz, Kind = ObstacleKind.Net,
+                        Surface = ground, Below = 0f, Above = math.max(0.5f, top - ground), Id = Pack(found[index]) });
                 }
         }
 
@@ -250,7 +290,7 @@ namespace FootbridgeBuilder.Tool
             }
             var inChain = new HashSet<Entity>(snapshot.Chain);
             long fingerprint = 17;
-            foreach (var (net, netPoints, width) in area.Nets)
+            foreach (var (net, netPoints, width, range) in area.Nets)
             {
                 if (inChain.Contains(net)) continue;
                 for (int index = 0; index + 1 < netPoints.Length; index++)
@@ -258,7 +298,8 @@ namespace FootbridgeBuilder.Tool
                     float2 a = netPoints[index].xz, b = netPoints[index + 1].xz;
                     if (math.distance(a, hit.xz) > Follow + 40f) continue;
                     float2 side = math.normalizesafe(new float2(-(b - a).y, (b - a).x)) * width * 0.5f;
-                    snapshot.Obstacles.Add(new Obstacle { A = a + side, B = b + side, C = b - side, D = a - side, Kind = ObstacleKind.Net, Surface = math.max(netPoints[index].y, netPoints[index + 1].y), Id = SiteArea.Pack(net) });
+                    snapshot.Obstacles.Add(new Obstacle { A = a + side, B = b + side, C = b - side, D = a - side, Kind = ObstacleKind.Net,
+                        Surface = math.max(netPoints[index].y, netPoints[index + 1].y), Below = range.x, Above = range.y, Id = SiteArea.Pack(net) });
                     if (math.distance(a, hit.xz) < 120f) fingerprint += math.hash(new int4((int2)math.round(a), (int2)math.round(b)));
                 }
             }
@@ -271,6 +312,7 @@ namespace FootbridgeBuilder.Tool
             }
             foreach (var water in area.Water) if (math.distance(water.A, hit.xz) < Follow + 40f) snapshot.Obstacles.Add(water);
             foreach (var junction in area.Junctions) if (math.distance(junction.A, hit.xz) < Follow + 40f) snapshot.Obstacles.Add(junction);
+            foreach (var pillar in area.Pillars) if (math.distance(pillar.A, hit.xz) < Follow + 40f) snapshot.Obstacles.Add(pillar);
             foreach (var link in snapshot.Chain) fingerprint = fingerprint * 31 + SiteArea.Pack(link);
             snapshot.Fingerprint = fingerprint;
             snapshot.Ground = area.Ground;

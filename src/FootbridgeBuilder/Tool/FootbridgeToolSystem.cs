@@ -405,6 +405,7 @@ namespace FootbridgeBuilder.Tool
                 {
                     Name = spec.Name, Width = spec.Width, MaxSlope = spec.MaxSlope, NodeOffset = spec.NodeOffset,
                     MaxEdgeLength = spec.MaxEdgeLength, MaxElevation = spec.MaxElevation, MaxSpan = math.max(path.Span, bridges[bridges.Count - 1].Longest),
+                    HeightRange = spec.HeightRange,
                 };
             return new BridgeRequest
             {
@@ -449,6 +450,7 @@ namespace FootbridgeBuilder.Tool
             State.UseShare = plan.UseShare;
             State.ExtraWalk = plan.ExtraWalk;
             State.CompetingMarked = plan.CompetingMarked;
+            State.CompetingDistance = plan.CompetingDistance;
             State.CrossingsRemoved = plan.CrossingsToRemove.Count(id => planSnapshot.CrossingNodes.TryGetValue(id, out var node) && node.Marked);
             State.Cost = -1;
             State.Refused = State.BuildingsReplaced = 0;

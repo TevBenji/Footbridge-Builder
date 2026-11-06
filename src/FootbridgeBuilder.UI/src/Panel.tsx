@@ -135,7 +135,9 @@ function Facts({ state }: { state: ToolState }) {
         <Stat label="Cost" value={state.cost >= 0 ? thousands(state.cost) : "Pricing..."} />
         {state.buildingsReplaced > 0 ? <Stat label="Buildings" tone="warn"
             value={state.buildingsReplaced === 1 ? "1 will be replaced" : `${state.buildingsReplaced} will be replaced`} /> : null}
-        {state.competingMarked ? <div className={styles.warning}>A marked crosswalk nearby still competes, so fewer cims will use the bridge.</div> : null}
+        {state.competingMarked ? <div className={styles.warning}>{state.competingDistance > 0
+            ? `A marked crosswalk ${state.competingDistance} m along the road still competes, so fewer cims will use the bridge.`
+            : "A marked crosswalk nearby still competes, so fewer cims will use the bridge."}</div> : null}
     </div>;
 }
 

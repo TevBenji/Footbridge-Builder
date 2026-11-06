@@ -29,6 +29,8 @@ namespace FootbridgeBuilder.Tool
         public int CrossingsRemoved;
         /// <summary>A marked crosswalk still competes after the build.</summary>
         public bool CompetingMarked;
+        /// <summary>How far along the road the competing crossing is, in metres.</summary>
+        public float CompetingDistance;
         /// <summary>The zoned buildings the game will replace, counted from its own warnings on the ghost.</summary>
         public int BuildingsReplaced;
         /// <summary>Pieces the game itself refuses (its red errors on the ghost).</summary>

@@ -130,6 +130,7 @@ namespace FootbridgeBuilder.Panel
             json.Append(",\"cost\":").Append(state.Cost.ToString(CultureInfo.InvariantCulture));
             json.Append(",\"crossingsRemoved\":").Append(state.CrossingsRemoved.ToString(CultureInfo.InvariantCulture));
             json.Append(",\"competingMarked\":").Append(state.CompetingMarked ? "true" : "false");
+            json.Append(",\"competingDistance\":").Append(((int)Math.Round(state.CompetingDistance)).ToString(System.Globalization.CultureInfo.InvariantCulture));
             json.Append(",\"buildingsReplaced\":").Append(state.BuildingsReplaced.ToString(CultureInfo.InvariantCulture));
             json.Append(",\"refused\":").Append(state.Refused.ToString(CultureInfo.InvariantCulture));
             json.Append(",\"turn\":").Append(Number(state.Turn));
