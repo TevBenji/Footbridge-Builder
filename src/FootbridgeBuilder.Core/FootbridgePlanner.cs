@@ -109,8 +109,10 @@ namespace FootbridgeBuilder.Core
                         if (reasonB.Length == 0) reasonB = whyB;
                     }
                     if (candidate == null) continue;
-                    if (candidate.Buildings.Count == 0) { if (Better(candidate, best)) best = candidate; }
-                    else if (Fewer(candidate, fallback)) fallback = candidate;
+                    // Only a candidate about to win is checked against the game's shape rules (checking all would be slow), so
+                    // a refused shape gives the next one its chance instead of ending the search.
+                    if (candidate.Buildings.Count == 0) { if (Better(candidate, best) && context.Passes(candidate)) best = candidate; }
+                    else if (Fewer(candidate, fallback) && context.Passes(candidate)) fallback = candidate;
                 }
                 if (best != null) return context.Assemble(best, plan);
             }
@@ -251,6 +253,8 @@ namespace FootbridgeBuilder.Core
                         {
                             yield return new DeckOption { Design = Design.DiagonalSpan, Lean = diagonal, SideA = Only(Leg.Backward), SideB = Only(Leg.Forward) };
                             yield return new DeckOption { Design = Design.DiagonalSpan, Lean = -diagonal, SideA = Only(Leg.Forward), SideB = Only(Leg.Backward) };
+                            yield return new DeckOption { Design = Design.SnakeDeck, Lean = 50f, SideA = Only(Leg.SnakeBackward), SideB = Only(Leg.SnakeForward) };
+                            yield return new DeckOption { Design = Design.SnakeDeck, Lean = -50f, SideA = Only(Leg.SnakeForward), SideB = Only(Leg.SnakeBackward) };
                         }
                         break;
                 }
@@ -645,6 +649,14 @@ namespace FootbridgeBuilder.Core
             }
 
             // ── output ──
+
+            /// <summary>Its finished pieces pass the game's shape rules.</summary>
+            public bool Passes(Candidate candidate)
+            {
+                var trial = Assemble(candidate, new BridgePlan());
+                if (!trial.Buildable && Blockers != null && Blockers.Count < 12) Blockers.AddRange(trial.Messages);
+                return trial.Buildable;
+            }
 
             public BridgePlan Assemble(Candidate candidate, BridgePlan plan)
             {

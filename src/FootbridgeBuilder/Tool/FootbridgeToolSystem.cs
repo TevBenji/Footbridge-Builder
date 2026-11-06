@@ -53,6 +53,8 @@ namespace FootbridgeBuilder.Tool
 
         // Planning: the latest request wins.
         private string requestedKey = "", suppressedKey = "";
+        // The request the plan on show was made for: a build waits until it is the latest one.
+        private string plannedKey = "";
         private float requestedAt;
         private Task<BridgePlan> planTask;
         private CancellationTokenSource planCancel;
@@ -289,6 +291,10 @@ namespace FootbridgeBuilder.Tool
             }
             if (keyboard != null && keyboard.leftBracketKey.wasPressedThisFrame) { SetTurn(turn - TurnStep); return; }
             if (keyboard != null && keyboard.rightBracketKey.wasPressedThisFrame) { SetTurn(turn + TurnStep); return; }
+            // A setting changed (from the panel, with the pointer off the road): plan again where the bridge was.
+            if (requestedKey.Length == 0 && plan != null && planSnapshot != null && !DevHovering
+                && SiteSnapshot.IsGroundRoad(EntityManager, planSnapshot.Edge, out _))
+                RequestPlan(planSnapshot.Edge, planHit, KeyFor(planSnapshot.Edge, planHit));
             // The panel's button: the pointer is over the panel then, not the road, so this comes before the hover.
             if (BuildRequested)
             {
@@ -314,7 +320,7 @@ namespace FootbridgeBuilder.Tool
                 return;
             }
 
-            string key = $"{edge.Index}:{edge.Version}:{(int)math.round(point.x / 2f)}:{(int)math.round(point.z / 2f)}:{turn}:{SettingsKey()}";
+            string key = KeyFor(edge, point);
             if (key != requestedKey && key != suppressedKey && UnityEngine.Time.realtimeSinceStartup - requestedAt > 0.12f)
                 RequestPlan(edge, point, key);
 
@@ -322,10 +328,18 @@ namespace FootbridgeBuilder.Tool
             if (click) TryBuild(frame);
         }
 
+        private string KeyFor(Entity edge, float3 point) =>
+            $"{edge.Index}:{edge.Version}:{(int)math.round(point.x / 2f)}:{(int)math.round(point.z / 2f)}:{turn}:{SettingsKey()}";
+
         private void TryBuild(int frame)
         {
-            // A newer bridge is still being planned: the click belongs to that one.
-            if (plan == null || planTask != null) return;
+            if (plan == null) return;
+            // A newer bridge is still being planned (a move, a turn or a setting): the build waits for that one.
+            if (planTask != null || plannedKey != requestedKey)
+            {
+                Message("Updating the bridge to the new settings. Click again in a moment.");
+                return;
+            }
             if (!plan.Buildable) { Message(plan.Messages.Count > 0 ? plan.Messages[0] : "No bridge fits here."); return; }
             if (!settled) return;
             if (State.Refused > 0) { Message("The game refuses part of this bridge here (shown red). Move along the road or turn it."); return; }
@@ -412,6 +426,7 @@ namespace FootbridgeBuilder.Tool
             if (task.IsFaulted) { Fail(task.Exception?.GetBaseException(), "The bridge could not be planned here."); return; }
             if (taskInput.Key != requestedKey) return;
             plan = task.Result;
+            plannedKey = taskInput.Key;
             PlanVersion++;
             if (!plan.Buildable && plan.Blockers.Count > 0)
                 Mod.Logger.Info("Footbridge Builder: nothing fits here. " + string.Join(" | ", plan.Messages) + " Blocked by: " + string.Join(" | ", plan.Blockers));
@@ -577,6 +592,8 @@ namespace FootbridgeBuilder.Tool
                     if (frame - stepFrame == 2) NetDefinitions.Destroy(EntityManager, ghost);
                     if (frame - stepFrame < VerifyFrames) return;
                     piecesReport = VerifyPieces(out piecesMissing);
+                    // An unfinished bridge leaves the street crossings as they are: cims still need a way across.
+                    if (piecesMissing) { Finish("The street crossings were left as they are."); return; }
                     EmitCrossings();
                     if (upgrades.Count == 0) { Finish(""); return; }
                     step = Step.CrossingsEmitted;
