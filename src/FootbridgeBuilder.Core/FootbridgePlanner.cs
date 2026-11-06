@@ -157,7 +157,8 @@ namespace FootbridgeBuilder.Core
             public readonly BridgeRequest Request;
             public readonly RoadLine Road;
             public List<string> Blockers;
-            // While working out the preview shape: only the bridged road itself is in the way.
+            // While working out the preview shape: only the bridged road itself is in the way, and the span and height limits
+            // that refused the plan are lifted, so the player still sees what they are placing.
             private bool ignoreObstacles;
             // Each outline with the circle around it: most outlines near a point are rejected by the circle alone.
             private readonly SpatialBuckets<(Obstacle Outline, float2 Centre, float Radius)> obstacles = new SpatialBuckets<(Obstacle, float2, float)>(16f);
@@ -298,12 +299,18 @@ namespace FootbridgeBuilder.Core
                     }
                     float shortfall = DeckShortfall(a.Landing, b.Landing, deckY);
                     if (shortfall <= 0.01f) break;
-                    if (attempt == 2) { whyA = whyB = "the deck can't clear the road here"; return null; }
+                    if (attempt == 2)
+                    {
+                        // The preview keeps the last shape whose ramps match its deck.
+                        if (ignoreObstacles) break;
+                        whyA = whyB = "the deck can't clear the road here";
+                        return null;
+                    }
                     deckY += shortfall + 0.05f;
                 }
 
                 // Half a metre under the limit: a 40.0 m deck over a 32 m road was refused by a game whose limit is 40 m.
-                if (math.distance(a.Landing, b.Landing) > (Request.Path ?? new PathSpec()).MaxSpan - 0.5f)
+                if (math.distance(a.Landing, b.Landing) > (Request.Path ?? new PathSpec()).MaxSpan - 0.5f && !ignoreObstacles)
                 {
                     whyA = whyB = "the road is too wide for one span of this path";
                     return null;
@@ -347,7 +354,7 @@ namespace FootbridgeBuilder.Core
                 side.Landing = Road.Offset(landingStation, sign * offset);
                 float height = deckY - Request.Ground(side.Landing);
                 if (height < 1f) { side.Problem = "the ground is as high as the deck"; return side; }
-                if (height > highest) { side.Problem = "the deck would be higher than the path can be raised"; return side; }
+                if (height > highest && !ignoreObstacles) { side.Problem = "the deck would be higher than the path can be raised"; return side; }
 
                 float2 along = Road.Tangent(landingStation);
                 float legGrade = grade;

@@ -503,6 +503,8 @@ namespace FootbridgeBuilder.Tool
             try
             {
                 if (plan == null || plan.Pieces.Count == 0 || State.Stage != ToolStage.Planned) return;
+                // A new ghost is green only once the game has had its say on it (a few frames), so a refused one never flashes green.
+                if (plan.Buildable && !settled) return;
                 bool fits = plan.Buildable && State.Refused == 0;
                 var colour = fits ? Fits : DoesNotFit;
                 var fill = new UnityEngine.Color(colour.r, colour.g, colour.b, 0.25f);
