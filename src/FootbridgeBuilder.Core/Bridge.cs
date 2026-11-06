@@ -53,6 +53,8 @@ namespace FootbridgeBuilder.Core
         /// as a road: a piece clears it only with the request's clearance over its surface.
         /// </summary>
         public float Below = float.NaN, Above = float.NaN;
+        /// <summary>For a sloping net: its lowest surface within the outline (what a piece passing under it must clear). NaN: <see cref="Surface"/>.</summary>
+        public float Lowest = float.NaN;
         public long Id;
     }
 

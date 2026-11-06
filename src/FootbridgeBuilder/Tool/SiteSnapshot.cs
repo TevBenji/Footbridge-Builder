@@ -299,7 +299,8 @@ namespace FootbridgeBuilder.Tool
                     if (math.distance(a, hit.xz) > Follow + 40f) continue;
                     float2 side = math.normalizesafe(new float2(-(b - a).y, (b - a).x)) * width * 0.5f;
                     snapshot.Obstacles.Add(new Obstacle { A = a + side, B = b + side, C = b - side, D = a - side, Kind = ObstacleKind.Net,
-                        Surface = math.max(netPoints[index].y, netPoints[index + 1].y), Below = range.x, Above = range.y, Id = SiteArea.Pack(net) });
+                        Surface = math.max(netPoints[index].y, netPoints[index + 1].y), Lowest = math.min(netPoints[index].y, netPoints[index + 1].y),
+                        Below = range.x, Above = range.y, Id = SiteArea.Pack(net) });
                     if (math.distance(a, hit.xz) < 120f) fingerprint += math.hash(new int4((int2)math.round(a), (int2)math.round(b)));
                 }
             }

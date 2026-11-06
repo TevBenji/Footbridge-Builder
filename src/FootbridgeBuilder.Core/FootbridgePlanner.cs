@@ -357,6 +357,9 @@ namespace FootbridgeBuilder.Core
                 float height = deckY - Request.Ground(side.Landing);
                 if (height < 1f) { side.Problem = "the ground is as high as the deck"; return side; }
                 if (height > highest && !ignoreObstacles) { side.Problem = "the deck would be higher than the path can be raised"; return side; }
+                // The pillar under the landing, whatever shape the ramps take from it.
+                string pillar = PillarProblem(side.Landing, deckY);
+                if (pillar.Length > 0) { side.Problem = pillar; return side; }
 
                 float2 along = Road.Tangent(landingStation);
                 float legGrade = grade;
@@ -433,7 +436,6 @@ namespace FootbridgeBuilder.Core
                 }
 
                 string landingProblem = CheckPoint(side.Landing, deckY, deck: false, side.Buildings);
-                if (landingProblem.Length == 0) landingProblem = PillarProblem(side.Landing, deckY);
                 if (landingProblem.Length > 0) { side.Problem = landingProblem; return side; }
                 foreach (var route in routes)
                 {
@@ -675,7 +677,9 @@ namespace FootbridgeBuilder.Core
             private bool ClearOf(Obstacle net, float height)
             {
                 if (height - net.Surface >= NeedOver(net)) return true;
-                return !float.IsNaN(net.Below) && height + pathRange.y <= net.Surface + net.Below;
+                // Under a sloping net, its low end is what counts.
+                float low = float.IsNaN(net.Lowest) ? net.Surface : math.min(net.Surface, net.Lowest);
+                return !float.IsNaN(net.Below) && height + pathRange.y <= low + net.Below;
             }
 
             // How far above a net's surface a piece must be to pass over it. A net with no height range is taken as a road.
