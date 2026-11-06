@@ -980,6 +980,8 @@ namespace FootbridgeBuilder.Tool
                 ghost.Clear();
                 upgrades.Clear();
                 step = Step.None;
+                interrupted = "";
+                reportAt = null;
                 State.Stage = ToolStage.Closed;
                 State.Summary = "";
                 State.Messages = new string[0];
