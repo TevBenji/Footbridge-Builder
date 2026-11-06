@@ -1,22 +1,86 @@
 // Footbridge Builder. Original work by TevBenji, 2026-11. GPL-3.0.
+//
+// The tool: hover a road, see the bridge, click to build it.
+//  * Hover: a net raycast finds the road; the world round it is copied (SiteSnapshot) and planned on a worker thread, the
+//    latest request winning.
+//  * Ghost: the plan goes out as real temporary nets. One Clear frame wipes the old ghost, the next frame emits the new one,
+//    and the game draws it with its pillars, its errors and its price, as for its own tools.
+//  * Build: a fresh snapshot is compared first (something may have changed); then Apply, then the crossing upgrades as a
+//    second Apply, then a check of what the game actually built: pieces by their end points, feet by the sidewalk's side
+//    connection, crossings by the node's crosswalk flag, cost by the city's money.
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Colossal.Mathematics;
 using Colossal.Serialization.Entities;
+using FootbridgeBuilder.Build;
+using FootbridgeBuilder.Core;
 using Game;
+using Game.City;
 using Game.Common;
 using Game.Input;
+using Game.Net;
 using Game.Prefabs;
+using Game.Simulation;
 using Game.Tools;
+using Unity.Collections;
+using Unity.Entities;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine.InputSystem;
 using UnityEngine.Scripting;
 
 namespace FootbridgeBuilder.Tool
 {
-    /// <summary>The footbridge tool. For now it only opens and closes with its panel; Esc closes it.</summary>
     public sealed partial class FootbridgeToolSystem : ToolBaseSystem
     {
+        private const float AreaSeconds = 3f;
+        private const float AreaReach = 80f;
+        private const int SettleFrames = 3, MostSettleFrames = 60, VerifyFrames = 30;
+        private const float TurnStep = 5f, MostTurn = 30f;
+
+        private TerrainSystem terrain;
+        private CitySystem city;
+        private EntityQuery temporaryEdges, temporaries, refused, replaced, builtPaths, icons, joinedRoads;
+        private List<PathKind> paths = new List<PathKind>();
+        private List<DeckBridge> bridges = new List<DeckBridge>();
+        private Entity deckPrefab;
+        private SiteArea area;
+        private bool areaStale = true;
         private float nextErrorLog;
+
+        // Planning: the latest request wins.
+        private string requestedKey = "", suppressedKey = "";
+        // The request the plan on show was made for: a build waits until it is the latest one.
+        private string plannedKey = "";
+        private float requestedAt;
+        private Task<BridgePlan> planTask;
+        private CancellationTokenSource planCancel;
+        private (string Key, HoverSnapshot Snapshot, PathKind Path, float3 Hit) taskInput;
+        private BridgePlan plan;
+        private HoverSnapshot planSnapshot;
+        private PathKind planPath;
+        private float3 planHit;
+        private float turn;
+
+        // The ghost on show.
+        private readonly List<Entity> ghost = new List<Entity>();
+        private bool clearPending, closing;
+        private BridgePlan emitPending;
+        private int emittedFrame = -1, lastCount = -1, stableSince;
+        private bool settled;
+
+        // The build.
+        private enum Step { None, Applied, CrossingsEmitted, CrossingsApplied }
+        private Step step;
+        private int stepFrame;
+        private long moneyBefore;
+        private int priced;
+        private readonly List<Entity> upgrades = new List<Entity>();
+        private string piecesReport = "";
+        private bool piecesMissing;
 
         public ToolState State { get; } = new ToolState();
         public override string toolID => "Footbridge Builder";
@@ -24,10 +88,53 @@ namespace FootbridgeBuilder.Tool
         public override bool TrySetPrefab(PrefabBase prefab) => false;
         internal bool IsActive => m_ToolSystem != null && m_ToolSystem.activeTool == this;
 
+        // For the local test runner (Dev build only): a hover and a click without the mouse.
+        internal bool DevHovering { get; set; }
+        internal Entity DevEdge { get; set; }
+        internal float3 DevPoint { get; set; }
+        /// <summary>A build asked for from the panel's button (or the test runner), handled on the next frame.</summary>
+        internal bool BuildRequested { get; set; }
+        internal bool GhostSettled => settled && plan != null;
+        /// <summary>Counts every ghost the game has priced, so a watcher can wait for the next one.</summary>
+        internal int GhostVersion { get; private set; }
+        /// <summary>Counts every plan the tool has taken on, so a watcher can wait for one made after its own hover.</summary>
+        internal int PlanVersion { get; private set; }
+        // What the last build's check found.
+        internal int LastPlanned { get; private set; }
+        internal int LastBuilt { get; private set; }
+        internal int LastFeet { get; private set; }
+        internal int LastJoined { get; private set; }
+        internal int LastCrossingsWanted { get; private set; }
+        internal int LastCrossingsRemoved { get; private set; }
+        internal long LastCharged { get; private set; }
+        internal BridgePlan CurrentPlan => plan;
+        internal HoverSnapshot CurrentSnapshot => planSnapshot;
+        internal PathKind CurrentPath => planPath;
+
         [Preserve]
         protected override void OnCreate()
         {
-            try { base.OnCreate(); }
+            try
+            {
+                base.OnCreate();
+                terrain = World.GetOrCreateSystemManaged<TerrainSystem>();
+                city = World.GetOrCreateSystemManaged<CitySystem>();
+                temporaryEdges = GetEntityQuery(ComponentType.ReadOnly<Edge>(), ComponentType.ReadOnly<Temp>());
+                temporaries = GetEntityQuery(ComponentType.ReadOnly<Temp>());
+                refused = GetEntityQuery(ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Error>());
+                replaced = GetEntityQuery(ComponentType.ReadOnly<Game.Buildings.Building>(), ComponentType.ReadOnly<Warning>(), ComponentType.Exclude<Temp>());
+                icons = GetEntityQuery(ComponentType.ReadOnly<Game.Notifications.Icon>(), ComponentType.ReadOnly<PrefabRef>());
+                joinedRoads = GetEntityQuery(new EntityQueryDesc
+                {
+                    All = new[] { ComponentType.ReadOnly<Road>(), ComponentType.ReadOnly<Curve>(), ComponentType.ReadOnly<ConnectedNode>() },
+                    None = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Deleted>() },
+                });
+                builtPaths = GetEntityQuery(new EntityQueryDesc
+                {
+                    All = new[] { ComponentType.ReadOnly<Edge>(), ComponentType.ReadOnly<PrefabRef>() },
+                    None = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Deleted>() },
+                });
+            }
             catch (Exception exception)
             {
                 Fail(exception, "The footbridge tool could not be created.");
@@ -46,8 +153,15 @@ namespace FootbridgeBuilder.Tool
             try
             {
                 if (State.Stage == ToolStage.Building) return;
+                paths = PathCatalog.List(EntityManager, World.GetOrCreateSystemManaged<PrefabSystem>());
+                bridges = PathCatalog.Bridges(EntityManager, World.GetOrCreateSystemManaged<PrefabSystem>());
+                State.PathNames = paths.Select(path => path.Name).ToArray();
+                State.PathLabels = paths.Select(path => path.Label).ToArray();
+                areaStale = true;
+                requestedKey = suppressedKey = "";
                 m_ToolSystem.activeTool = this;
                 State.Stage = ToolStage.Hovering;
+                State.Summary = paths.Count == 0 ? "No footpath that can be raised is available yet." : "";
                 Touch();
             }
             catch (Exception exception) { Fail(exception, "The footbridge tool could not open."); }
@@ -58,11 +172,28 @@ namespace FootbridgeBuilder.Tool
             try
             {
                 if (State.Stage == ToolStage.Building) { Message("Still building. Wait until it is done."); return; }
+                // The ghost goes first: only the active tool can clear its temporaries.
+                if (IsActive && ghost.Count > 0) { closing = true; return; }
                 State.Stage = ToolStage.Closed;
                 if (IsActive) m_ToolSystem.activeTool = m_DefaultToolSystem;
                 Touch();
             }
             catch (Exception exception) { Fail(exception, "The footbridge tool could not close."); }
+        }
+
+        public void Build() => BuildRequested = true;
+
+        public void SettingsChanged()
+        {
+            requestedKey = suppressedKey = "";
+            Touch();
+        }
+
+        public void SetTurn(float degrees)
+        {
+            turn = math.clamp(math.round(degrees / TurnStep) * TurnStep, -MostTurn, MostTurn);
+            State.Turn = turn;
+            SettingsChanged();
         }
 
         [Preserve]
@@ -84,8 +215,15 @@ namespace FootbridgeBuilder.Tool
             {
                 applyMode = ApplyMode.None;
                 EnableActions(false);
-                // The invisible build tool briefly owns the tool slot while a build applies.
-                if (State.Stage != ToolStage.Building) State.Stage = ToolStage.Closed;
+                planCancel?.Cancel();
+                planTask = null;
+                NetDefinitions.Destroy(EntityManager, ghost);
+                NetDefinitions.Destroy(EntityManager, upgrades);
+                plan = null;
+                settled = closing = clearPending = false;
+                emitPending = null;
+                step = Step.None;
+                State.Stage = ToolStage.Closed;
                 Touch();
                 base.OnStopRunning();
             }
@@ -97,7 +235,8 @@ namespace FootbridgeBuilder.Tool
             try
             {
                 base.InitializeRaycast();
-                m_ToolRaycastSystem.typeMask = TypeMask.None;
+                m_ToolRaycastSystem.typeMask = TypeMask.Net;
+                m_ToolRaycastSystem.netLayerMask = Layer.Road;
             }
             catch (Exception exception) { LogUpdateError(exception, "Footbridge Builder: setting up the raycast failed"); }
         }
@@ -108,22 +247,599 @@ namespace FootbridgeBuilder.Tool
             try
             {
                 applyMode = ApplyMode.None;
-                if (!IsActive || State.Stage == ToolStage.Building) return inputDependencies;
+                AdoptFinishedPlan();
+                if (!IsActive) return inputDependencies;
+                int frame = UnityEngine.Time.frameCount;
+                bool handled = false;
+                DevTick(frame, ref handled);
+                if (handled) return inputDependencies;
+                if (State.Stage == ToolStage.Building) { BuildTick(frame); return inputDependencies; }
+                if (closing)
+                {
+                    NetDefinitions.Destroy(EntityManager, ghost);
+                    applyMode = ApplyMode.Clear;
+                    closing = false;
+                    plan = null;
+                    State.Stage = ToolStage.Closed;
+                    m_ToolSystem.activeTool = m_DefaultToolSystem;
+                    Touch();
+                    return inputDependencies;
+                }
+                if (GhostTick(frame)) return inputDependencies;
                 var input = InputManager.instance;
                 if (input == null || input.hasInputFieldFocus) return inputDependencies;
-                var mouse = Mouse.current;
-                var keyboard = Keyboard.current;
-                // The game's cancel action also fires on the right button, which belongs to the camera.
-                bool rightButton = mouse != null && (mouse.rightButton.isPressed || mouse.rightButton.wasPressedThisFrame);
-                bool escape = (cancelAction != null && cancelAction.WasPressedThisFrame() && !rightButton)
-                    || (keyboard != null && keyboard.escapeKey.wasPressedThisFrame);
-                if (escape) Close();
+                HandleInput(input, frame);
             }
-            catch (Exception exception)
-            {
-                LogUpdateError(exception, "Footbridge Builder: tool update failed");
-            }
+            catch (Exception exception) { LogUpdateError(exception, "Footbridge Builder: tool update failed"); }
             return inputDependencies;
+        }
+
+        private void HandleInput(InputManager input, int frame)
+        {
+            var mouse = Mouse.current;
+            var keyboard = Keyboard.current;
+            bool overWorld = input.controlOverWorld;
+            // The game's cancel action also fires on the right button, which belongs to the camera.
+            bool rightButton = mouse != null && (mouse.rightButton.isPressed || mouse.rightButton.wasPressedThisFrame);
+            bool escape = (cancelAction != null && cancelAction.WasPressedThisFrame() && !rightButton) || (keyboard != null && keyboard.escapeKey.wasPressedThisFrame);
+            if (escape)
+            {
+                // Esc drops the bridge on show; again, it closes the tool.
+                if (plan != null || ghost.Count > 0) { suppressedKey = requestedKey; DropPlan(); return; }
+                Close();
+                return;
+            }
+            if (keyboard != null && keyboard.leftBracketKey.wasPressedThisFrame) { SetTurn(turn - TurnStep); return; }
+            if (keyboard != null && keyboard.rightBracketKey.wasPressedThisFrame) { SetTurn(turn + TurnStep); return; }
+            // A setting changed (from the panel, with the pointer off the road): plan again where the bridge was.
+            if (requestedKey.Length == 0 && plan != null && planSnapshot != null && !DevHovering
+                && SiteSnapshot.IsGroundRoad(EntityManager, planSnapshot.Edge, out _))
+                RequestPlan(planSnapshot.Edge, planHit, KeyFor(planSnapshot.Edge, planHit));
+            // The panel's button: the pointer is over the panel then, not the road, so this comes before the hover.
+            if (BuildRequested)
+            {
+                BuildRequested = false;
+                TryBuild(frame);
+                return;
+            }
+
+            Entity edge = Entity.Null;
+            float3 point = default;
+            bool hovering;
+            if (DevHovering) { edge = DevEdge; point = DevPoint; hovering = true; }
+            else
+            {
+                RaycastHit hit = default;
+                hovering = overWorld && GetRaycastResult(out edge, out hit) && math.all(math.isfinite(hit.m_HitPosition));
+                point = hovering ? hit.m_HitPosition : default;
+            }
+            if (hovering && EntityManager.HasComponent<Temp>(edge)) edge = EntityManager.GetComponentData<Temp>(edge).m_Original;
+            if (!hovering || !SiteSnapshot.IsGroundRoad(EntityManager, edge, out _))
+            {
+                if (plan != null && !DevHovering && overWorld) { requestedKey = ""; DropPlan(); }
+                return;
+            }
+
+            string key = KeyFor(edge, point);
+            if (key != requestedKey && key != suppressedKey && UnityEngine.Time.realtimeSinceStartup - requestedAt > 0.12f)
+                RequestPlan(edge, point, key);
+
+            bool click = overWorld && ((applyAction != null && applyAction.WasPressedThisFrame()) || (mouse != null && mouse.leftButton.wasPressedThisFrame));
+            if (click) TryBuild(frame);
+        }
+
+        private string KeyFor(Entity edge, float3 point) =>
+            $"{edge.Index}:{edge.Version}:{(int)math.round(point.x / 2f)}:{(int)math.round(point.z / 2f)}:{turn}:{SettingsKey()}";
+
+        private void TryBuild(int frame)
+        {
+            if (plan == null) return;
+            // A newer bridge is still being planned (a move, a turn or a setting): the build waits for that one.
+            if (planTask != null || plannedKey != requestedKey)
+            {
+                Message("Updating the bridge to the new settings. Click again in a moment.");
+                return;
+            }
+            if (!plan.Buildable) { Message(plan.Messages.Count > 0 ? plan.Messages[0] : "No bridge fits here."); return; }
+            if (!settled) return;
+            if (State.Refused > 0) { Message("The game refuses part of this bridge here (shown red). Move along the road or turn it."); return; }
+            StartBuild(frame);
+        }
+
+        /// <summary>The local test runner's own work (Dev build only; empty otherwise).</summary>
+        partial void DevTick(int frame, ref bool handled);
+
+        private string SettingsKey()
+        {
+            var settings = Mod.Settings;
+            return settings == null ? "" : $"{settings.Design}|{settings.PathName}|{settings.RemoveCrossings}|{settings.CrossingReach}|{settings.ExtraClearance}";
+        }
+
+        // ── planning ──
+
+        private SiteArea Area(float2 centre, bool fresh)
+        {
+            if (fresh || areaStale || area == null || math.distance(area.Centre, centre) > AreaReach
+                || UnityEngine.Time.realtimeSinceStartup - area.Taken > AreaSeconds)
+            {
+                area = new SiteArea(EntityManager, World, centre);
+                areaStale = false;
+            }
+            return area;
+        }
+
+        private void RequestPlan(Entity edge, float3 point, string key)
+        {
+            requestedKey = key;
+            requestedAt = UnityEngine.Time.realtimeSinceStartup;
+            var settings = Mod.Settings;
+            var path = PathCatalog.Find(paths, settings?.PathName ?? PathCatalog.DefaultName);
+            if (path == null) { State.Summary = "No footpath that can be raised is available."; Touch(); return; }
+            if (path.Locked) { State.Summary = "Footpaths aren't unlocked in this city yet."; Touch(); return; }
+            var snapshot = SiteSnapshot.Capture(EntityManager, Area(point.xz, fresh: false), edge, point, path, out string problem);
+            if (snapshot == null) { State.Summary = problem; Touch(); return; }
+            var request = Request(snapshot, path, point);
+            planCancel?.Cancel();
+            planCancel = new CancellationTokenSource();
+            var cancel = planCancel.Token;
+            taskInput = (key, snapshot, path, point);
+            planTask = Task.Run(() => FootbridgePlanner.Plan(request, cancel), cancel);
+        }
+
+        private BridgeRequest Request(HoverSnapshot snapshot, PathKind path, float3 point)
+        {
+            var settings = Mod.Settings;
+            Enum.TryParse(settings?.Design ?? "Auto", out Design design);
+            // Wider than the path can span: one of the game's pedestrian bridges carries the deck instead.
+            var spec = path.Spec;
+            if (bridges.Count > 0)
+                spec = new PathSpec
+                {
+                    Name = spec.Name, Width = spec.Width, MaxSlope = spec.MaxSlope, NodeOffset = spec.NodeOffset,
+                    MaxEdgeLength = spec.MaxEdgeLength, MaxElevation = spec.MaxElevation, MaxSpan = math.max(path.Span, bridges[bridges.Count - 1].Longest),
+                };
+            return new BridgeRequest
+            {
+                Road = snapshot.Road,
+                RoadWidth = snapshot.RoadWidth,
+                RoadHasSidewalks = snapshot.Sidewalks,
+                Cursor = point.xz,
+                TurnDegrees = turn,
+                Clearance = snapshot.Clearance,
+                ExtraClearance = math.clamp(settings?.ExtraClearance ?? 0.5f, 0f, 3f),
+                Design = design,
+                CrossingControl = settings == null || settings.RemoveCrossings ? CrossingControl.RemoveInReach : CrossingControl.Off,
+                CrossingReach = math.clamp(settings?.CrossingReach ?? 60, 20, 150),
+                Path = spec,
+                Ground = snapshot.Ground,
+                Obstacles = snapshot.Obstacles,
+                Crossings = snapshot.Crossings,
+            };
+        }
+
+        private void AdoptFinishedPlan()
+        {
+            if (planTask == null || !planTask.IsCompleted) return;
+            var task = planTask;
+            planTask = null;
+            if (task.IsCanceled) return;
+            if (task.IsFaulted) { Fail(task.Exception?.GetBaseException(), "The bridge could not be planned here."); return; }
+            if (taskInput.Key != requestedKey) return;
+            plan = task.Result;
+            plannedKey = taskInput.Key;
+            PlanVersion++;
+            if (!plan.Buildable && plan.Blockers.Count > 0)
+                Mod.Logger.Info("Footbridge Builder: nothing fits here. " + string.Join(" | ", plan.Messages) + " Blocked by: " + string.Join(" | ", plan.Blockers));
+            planSnapshot = taskInput.Snapshot;
+            planPath = taskInput.Path;
+            planHit = taskInput.Hit;
+            State.Stage = ToolStage.Planned;
+            State.Buildable = plan.Buildable;
+            State.DesignName = plan.DesignName;
+            State.DeckHeight = plan.DeckHeight;
+            State.UseLabel = plan.UseLabel;
+            State.UseShare = plan.UseShare;
+            State.ExtraWalk = plan.ExtraWalk;
+            State.CompetingMarked = plan.CompetingMarked;
+            State.CrossingsRemoved = plan.CrossingsToRemove.Count(id => planSnapshot.CrossingNodes.TryGetValue(id, out var node) && node.Marked);
+            State.Cost = -1;
+            State.Refused = State.BuildingsReplaced = 0;
+            State.Summary = plan.Buildable ? plan.DesignName : "No bridge fits here.";
+            State.Messages = plan.Messages.ToArray();
+            State.Progress = 0f;
+            Touch();
+            // The old ghost goes in one frame and the new one comes in the next.
+            clearPending = true;
+            emitPending = plan.Buildable ? plan : null;
+        }
+
+        private void DropPlan()
+        {
+            planCancel?.Cancel();
+            planTask = null;
+            plan = null;
+            clearPending = true;
+            emitPending = null;
+            State.Stage = ToolStage.Hovering;
+            State.Buildable = false;
+            State.DesignName = "";
+            State.Summary = "";
+            State.Messages = new string[0];
+            Touch();
+        }
+
+        // ── the ghost ──
+
+        /// <summary>True when this frame belongs to the ghost (a Clear or an emission), so input waits.</summary>
+        private bool GhostTick(int frame)
+        {
+            if (clearPending)
+            {
+                NetDefinitions.Destroy(EntityManager, ghost);
+                applyMode = ApplyMode.Clear;
+                clearPending = false;
+                settled = false;
+                emittedFrame = -1;
+                return true;
+            }
+            if (emitPending != null)
+            {
+                // Room in the terrain's road cull list before our nets come (TerrainCullGuard: the CullForCascades crash).
+                TerrainCullGuard.Reserve(terrain, emitPending.Pieces.Count);
+                deckPrefab = DeckFor(emitPending);
+                ghost.AddRange(NetDefinitions.Emit(EntityManager, emitPending, planPath.Prefab, deckPrefab, (uint)requestedKey.GetHashCode()));
+                emitPending = null;
+                emittedFrame = frame;
+                lastCount = -1;
+                return true;
+            }
+            if (emittedFrame < 0 || settled) return false;
+            if (!Settle(frame, emittedFrame)) return false;
+            settled = true;
+            ReadGhost();
+            return false;
+        }
+
+        /// <summary>The pedestrian bridge for a deck longer than the path can span (the shortest that reaches); none otherwise.</summary>
+        private Entity DeckFor(BridgePlan bridge)
+        {
+            foreach (var piece in bridge.Pieces)
+            {
+                if (!piece.Deck) continue;
+                float span = math.distance(bridge.Position(piece.Start).xz, bridge.Position(piece.End).xz);
+                if (span <= planPath.Span - 0.5f) return Entity.Null;
+                foreach (var candidate in bridges)
+                    if (span >= candidate.Shortest && span <= candidate.Longest - 0.5f) return candidate.Prefab;
+            }
+            return Entity.Null;
+        }
+
+        // The game has turned the definitions into temporaries once their number stops changing.
+        private bool Settle(int frame, int since)
+        {
+            int count = temporaryEdges.CalculateEntityCount();
+            if (count != lastCount) { lastCount = count; stableSince = frame; }
+            return (frame - since >= 2 && count > 0 && frame - stableSince >= SettleFrames) || frame - since >= MostSettleFrames;
+        }
+
+        /// <summary>The game's own verdict on the ghost: its price, its refusals and the buildings it would replace.</summary>
+        private void ReadGhost()
+        {
+            long cost = 0;
+            using (var temps = temporaries.ToComponentDataArray<Temp>(Allocator.Temp))
+                foreach (var temp in temps)
+                    if ((temp.m_Flags & TempFlags.Cancel) == 0) cost += temp.m_Cost;
+            State.Cost = (int)math.min(cost, int.MaxValue);
+            State.Refused = refused.CalculateEntityCount();
+            State.BuildingsReplaced = replaced.CalculateEntityCount();
+            var messages = new List<string>(plan?.Messages ?? new List<string>());
+            RefusedBecause = State.Refused > 0 ? ErrorNames() : "";
+            if (State.Refused > 0)
+                messages.Insert(0, "The game refuses part of this bridge here (shown red)" + (RefusedBecause.Length > 0 ? ": " + RefusedBecause + "." : "."));
+            State.Messages = messages.ToArray();
+            GhostVersion++;
+            Touch();
+        }
+
+        /// <summary>The game's own names for the errors on the ghost (on its warning icons), for the log and the panel.</summary>
+        internal string RefusedBecause { get; private set; } = "";
+
+        private string ErrorNames()
+        {
+            var names = new SortedSet<string>();
+            using (var found = icons.ToEntityArray(Allocator.Temp))
+                foreach (var icon in found)
+                {
+                    Entity prefab = EntityManager.GetComponentData<PrefabRef>(icon).m_Prefab;
+                    if (!EntityManager.HasComponent<ToolErrorData>(prefab)) continue;
+                    Entity owner = EntityManager.HasComponent<Owner>(icon) ? EntityManager.GetComponentData<Owner>(icon).m_Owner : Entity.Null;
+                    bool ours = EntityManager.HasComponent<Temp>(icon)
+                        || (owner != Entity.Null && EntityManager.Exists(owner) && EntityManager.HasComponent<Temp>(owner));
+                    if (ours) names.Add(EntityManager.GetComponentData<ToolErrorData>(prefab).m_Error.ToString());
+                }
+            return string.Join(", ", names);
+        }
+
+        // ── building ──
+
+        private void StartBuild(int frame)
+        {
+            // Something may have been built or bulldozed since the plan was made: compare a fresh snapshot first.
+            var fresh = SiteSnapshot.Capture(EntityManager, Area(planHit.xz, fresh: true), planSnapshot.Edge, planHit, planPath, out _);
+            if (fresh == null || fresh.Fingerprint != planSnapshot.Fingerprint)
+            {
+                requestedKey = "";
+                Message("Something changed here. Check the new bridge and click again.");
+                return;
+            }
+            moneyBefore = Money();
+            priced = math.max(0, State.Cost);
+            applyMode = ApplyMode.Apply;
+            step = Step.Applied;
+            stepFrame = frame;
+            State.Stage = ToolStage.Building;
+            State.Progress = 0.3f;
+            State.Summary = "Building…";
+            Touch();
+            Mod.Logger.Info($"Footbridge Builder: building '{plan.DesignName}', {plan.Pieces.Count} pieces, deck {plan.DeckHeight:F2} m, priced {priced}, {State.BuildingsReplaced} buildings replaced.");
+        }
+
+        private void BuildTick(int frame)
+        {
+            switch (step)
+            {
+                case Step.Applied:
+                    if (frame - stepFrame == 2) NetDefinitions.Destroy(EntityManager, ghost);
+                    if (frame - stepFrame < VerifyFrames) return;
+                    piecesReport = VerifyPieces(out piecesMissing);
+                    // An unfinished bridge leaves the street crossings as they are: cims still need a way across.
+                    if (piecesMissing) { Finish("The street crossings were left as they are."); return; }
+                    EmitCrossings();
+                    if (upgrades.Count == 0) { Finish(""); return; }
+                    step = Step.CrossingsEmitted;
+                    stepFrame = frame;
+                    lastCount = -1;
+                    State.Progress = 0.7f;
+                    Touch();
+                    return;
+                case Step.CrossingsEmitted:
+                    if (!Settle(frame, stepFrame)) return;
+                    applyMode = ApplyMode.Apply;
+                    step = Step.CrossingsApplied;
+                    stepFrame = frame;
+                    return;
+                case Step.CrossingsApplied:
+                    if (frame - stepFrame == 2) NetDefinitions.Destroy(EntityManager, upgrades);
+                    if (frame - stepFrame < VerifyFrames) return;
+                    Finish(VerifyCrossings());
+                    return;
+            }
+        }
+
+        private void EmitCrossings()
+        {
+            upgrades.Clear();
+            if (plan.CrossingsToRemove.Count == 0) return;
+            // Each road edge gets one definition carrying every end that loses its crosswalk.
+            var ends = new Dictionary<Entity, (bool Start, bool End)>();
+            foreach (long id in plan.CrossingsToRemove)
+            {
+                if (!planSnapshot.CrossingNodes.TryGetValue(id, out var crossing) || !crossing.Marked) continue;
+                foreach (var (edge, atStart) in Fresh(crossing).Ends)
+                {
+                    ends.TryGetValue(edge, out var both);
+                    ends[edge] = atStart ? (true, both.End) : (both.Start, true);
+                }
+            }
+            foreach (var pair in ends)
+            {
+                var definition = NetDefinitions.RemoveCrosswalk(EntityManager, pair.Key, pair.Value.Start, pair.Value.End);
+                if (definition.HasValue) upgrades.Add(definition.Value);
+            }
+        }
+
+        /// <summary>Matches every planned piece to a built edge by its two end points, and every foot to a sidewalk join.</summary>
+        private string VerifyPieces(out bool missing)
+        {
+            var built = new List<(float3 Start, float3 End, Entity StartNode, Entity EndNode)>();
+            using (var edges = builtPaths.ToEntityArray(Allocator.Temp))
+                foreach (var edge in edges)
+                {
+                    var prefab = EntityManager.GetComponentData<PrefabRef>(edge).m_Prefab;
+                    if (prefab != planPath.Prefab && (deckPrefab == Entity.Null || prefab != deckPrefab)) continue;
+                    var ends = EntityManager.GetComponentData<Edge>(edge);
+                    if (!EntityManager.HasComponent<Node>(ends.m_Start) || !EntityManager.HasComponent<Node>(ends.m_End)) continue;
+                    float3 a = EntityManager.GetComponentData<Node>(ends.m_Start).m_Position, b = EntityManager.GetComponentData<Node>(ends.m_End).m_Position;
+                    if (math.distance(a.xz, planHit.xz) > 400f) continue;
+                    built.Add((a, b, ends.m_Start, ends.m_End));
+                }
+            bool Near(float3 a, float3 b) => math.distance(a.xz, b.xz) < 1f && math.abs(a.y - b.y) < 1.5f;
+            int matched = 0;
+            foreach (var piece in plan.Pieces)
+            {
+                float3 a = plan.Position(piece.Start), b = plan.Position(piece.End);
+                if (Linked(built, a, b, Near)) { matched++; continue; }
+                // Which piece, and the nearest built node to each end, so a missing one can be traced.
+                float nearestA = built.Count == 0 ? -1f : built.Min(edge => math.min(math.distance(edge.Start, a), math.distance(edge.End, a)));
+                float nearestB = built.Count == 0 ? -1f : built.Min(edge => math.min(math.distance(edge.Start, b), math.distance(edge.End, b)));
+                Mod.Logger.Warn($"Footbridge Builder: a planned piece wasn't found built: ({a.x:F1}, {a.y:F1}, {a.z:F1}) to ({b.x:F1}, {b.y:F1}, {b.z:F1}), "
+                    + $"{(piece.Deck ? "the deck" : plan.Nodes[piece.End].GroundEnd || plan.Nodes[piece.Start].GroundEnd ? "a foot" : "a ramp")}; nearest built nodes {nearestA:F2} m and {nearestB:F2} m away; "
+                    + EdgesAt(built.Where(edge => Near(edge.Start, a)).Select(edge => edge.StartNode).Concat(built.Where(edge => Near(edge.End, a)).Select(edge => edge.EndNode)).FirstOrDefault()));
+            }
+            int feet = 0, joined = 0;
+            foreach (var node in plan.Nodes.Where(node => node.GroundEnd))
+            {
+                feet++;
+                Entity foot = Entity.Null;
+                foreach (var edge in built)
+                {
+                    if (Near(edge.Start, node.Position)) foot = edge.StartNode;
+                    else if (Near(edge.End, node.Position)) foot = edge.EndNode;
+                }
+                if (foot != Entity.Null && JoinedRoad(foot, node.Position) != Entity.Null) joined++;
+            }
+            missing = matched < plan.Pieces.Count;
+            LastPlanned = plan.Pieces.Count;
+            LastBuilt = matched;
+            LastFeet = feet;
+            LastJoined = joined;
+            LastCrossingsWanted = LastCrossingsRemoved = 0;
+            string report = matched == plan.Pieces.Count ? $"All {matched} pieces built." : $"Only {matched} of {plan.Pieces.Count} pieces were built.";
+            if (planSnapshot.Sidewalks)
+                report += joined == feet ? $" All {feet} ramp feet joined the sidewalk." : $" {joined} of {feet} ramp feet joined the sidewalk.";
+            Mod.Logger.Info($"Footbridge Builder: {report} ({built.Count} path edges nearby)");
+            return report;
+        }
+
+        // From the node at one end, along built path edges that stay on the piece's line, to the node at the other end.
+        private static bool Linked(List<(float3 Start, float3 End, Entity StartNode, Entity EndNode)> built, float3 a, float3 b, Func<float3, float3, bool> near)
+        {
+            float3 at = a;
+            var visited = new HashSet<float3>();
+            for (int step = 0; step < 4; step++)
+            {
+                visited.Add(at);
+                float3? next = null;
+                foreach (var edge in built)
+                {
+                    float3 other;
+                    if (near(edge.Start, at)) other = edge.End;
+                    else if (near(edge.End, at)) other = edge.Start;
+                    else continue;
+                    if (near(other, b)) return true;
+                    // A node the game added sits between the two ends.
+                    bool between = !visited.Contains(other) && math.distance(other.xz, b.xz) < math.distance(at.xz, b.xz)
+                        && Distance(other.xz, a.xz, b.xz) < 2f;
+                    if (between) next = other;
+                }
+                if (!next.HasValue) return false;
+                at = next.Value;
+            }
+            return false;
+        }
+
+        private static float Distance(float2 point, float2 from, float2 to)
+        {
+            float2 line = to - from;
+            float t = math.saturate(math.dot(point - from, line) / math.max(1e-6f, math.lengthsq(line)));
+            return math.distance(point, from + line * t);
+        }
+
+        // What meets at a node, for tracing a piece the game built differently from the plan.
+        private string EdgesAt(Entity node)
+        {
+            if (node == Entity.Null || !EntityManager.HasBuffer<ConnectedEdge>(node)) return "no node there";
+            var prefabs = World.GetOrCreateSystemManaged<PrefabSystem>();
+            var parts = new List<string>();
+            foreach (var connected in EntityManager.GetBuffer<ConnectedEdge>(node, true))
+            {
+                var ends = EntityManager.GetComponentData<Edge>(connected.m_Edge);
+                Entity other = ends.m_Start == node ? ends.m_End : ends.m_Start;
+                string name;
+                try { name = prefabs.GetPrefab<PrefabBase>(EntityManager.GetComponentData<PrefabRef>(connected.m_Edge).m_Prefab)?.name ?? "?"; } catch (Exception) { name = "?"; }
+                float3 at = EntityManager.HasComponent<Node>(other) ? EntityManager.GetComponentData<Node>(other).m_Position : float3.zero;
+                parts.Add($"{name} to ({at.x:F1}, {at.y:F1}, {at.z:F1})");
+            }
+            return "edges there: " + string.Join("; ", parts);
+        }
+
+        /// <summary>
+        /// A crossing's node and our road's edge ends at it, as they are now: the bridge's feet joining the sidewalk renews the
+        /// road's nodes and edges, so the snapshot's entities are gone by the time the crossings are removed.
+        /// </summary>
+        private (Entity Node, List<(Entity Edge, bool AtStart)> Ends) Fresh(CrossingNode crossing)
+        {
+            var ends = new List<(Entity Edge, bool AtStart)>();
+            Entity node = Entity.Null;
+            float best = 1f;
+            using (var query = EntityManager.CreateEntityQuery(ComponentType.ReadOnly<Node>(), ComponentType.ReadOnly<ConnectedEdge>(),
+                ComponentType.Exclude<Temp>(), ComponentType.Exclude<Deleted>()))
+            using (var nodes = query.ToEntityArray(Allocator.Temp))
+                foreach (var candidate in nodes)
+                {
+                    float distance = math.distance(EntityManager.GetComponentData<Node>(candidate).m_Position.xz, crossing.Position.xz);
+                    if (distance < best) { best = distance; node = candidate; }
+                }
+            if (node == Entity.Null) return (node, ends);
+            foreach (var connected in EntityManager.GetBuffer<ConnectedEdge>(node, true))
+            {
+                var edge = connected.m_Edge;
+                if (!EntityManager.HasComponent<Road>(edge) || EntityManager.HasComponent<Temp>(edge) || !EntityManager.HasComponent<Curve>(edge)) continue;
+                // Our road's legs, not the side street's: the edge's middle lies on our road's line.
+                float3 middle = MathUtils.Position(EntityManager.GetComponentData<Curve>(edge).m_Bezier, 0.5f);
+                if (DistanceToRoad(middle.xz) > planSnapshot.RoadWidth * 0.5f) continue;
+                ends.Add((edge, EntityManager.GetComponentData<Edge>(edge).m_Start == node));
+            }
+            return (node, ends);
+        }
+
+        private float DistanceToRoad(float2 point)
+        {
+            float best = float.MaxValue;
+            var road = planSnapshot.Road;
+            for (int index = 0; index + 1 < road.Length; index++) best = math.min(best, Distance(point, road[index].xz, road[index + 1].xz));
+            return best;
+        }
+
+        /// <summary>The road a foot joined: any road near it whose side connections list the foot's node (the road may be a new entity by now).</summary>
+        internal Entity JoinedRoad(Entity foot, float3 position)
+        {
+            using (var roads = joinedRoads.ToEntityArray(Allocator.Temp))
+                foreach (var road in roads)
+                {
+                    if (MathUtils.Distance(EntityManager.GetComponentData<Curve>(road).m_Bezier.xz, position.xz, out _) > 40f) continue;
+                    foreach (var connected in EntityManager.GetBuffer<ConnectedNode>(road, true))
+                        if (connected.m_Node == foot) return road;
+                }
+            return Entity.Null;
+        }
+
+        private string VerifyCrossings()
+        {
+            int wanted = 0, removed = 0;
+            foreach (long id in plan.CrossingsToRemove)
+            {
+                if (!planSnapshot.CrossingNodes.TryGetValue(id, out var crossing) || !crossing.Marked) continue;
+                wanted++;
+                var (node, fresh) = Fresh(crossing);
+                if (node != Entity.Null && SiteSnapshot.MarkedCrossings(EntityManager, node, fresh, planSnapshot.RoadWidth) == 0) removed++;
+            }
+            LastCrossingsWanted = wanted;
+            LastCrossingsRemoved = removed;
+            if (wanted == 0) return "";
+            return removed == wanted ? (wanted == 1 ? "1 crossing removed." : $"{wanted} crossings removed.") : $"{removed} of {wanted} crossings removed.";
+        }
+
+        private void Finish(string crossings)
+        {
+            long spent = moneyBefore - Money();
+            int charged = spent > 0 ? (int)spent : priced;
+            LastCharged = spent;
+            State.Stage = piecesMissing ? ToolStage.Failed : ToolStage.Built;
+            State.Summary = piecesMissing ? "Built, with pieces missing." : "Built.";
+            var report = new List<string> { piecesReport };
+            if (crossings.Length > 0) report.Add(crossings);
+            if (charged > 0) report.Add($"Cost {charged:N0}.");
+            State.Messages = new[] { string.Join(" ", report.Where(line => line.Length > 0)) };
+            State.Progress = 1f;
+            step = Step.None;
+            plan = null;
+            settled = false;
+            areaStale = true;
+            requestedKey = "";
+            suppressedKey = "";
+            Mod.Logger.Info("Footbridge Builder: " + State.Summary + " " + State.Messages[0]);
+            Touch();
+        }
+
+        private long Money()
+        {
+            try
+            {
+                Entity cityEntity = city.City;
+                return cityEntity != Entity.Null && EntityManager.HasComponent<PlayerMoney>(cityEntity) ? EntityManager.GetComponentData<PlayerMoney>(cityEntity).money : 0;
+            }
+            catch (Exception) { return 0; }
         }
 
         [Preserve]
@@ -132,6 +848,13 @@ namespace FootbridgeBuilder.Tool
             try
             {
                 // Everything the tool holds belongs to the old city.
+                planCancel?.Cancel();
+                planTask = null;
+                plan = null;
+                area = null;
+                ghost.Clear();
+                upgrades.Clear();
+                step = Step.None;
                 State.Stage = ToolStage.Closed;
                 State.Summary = "";
                 State.Messages = new string[0];
@@ -152,7 +875,7 @@ namespace FootbridgeBuilder.Tool
         private void Message(string message)
         {
             if (State.Messages.Contains(message)) return;
-            State.Messages = State.Messages.Concat(new[] { message }).ToArray();
+            State.Messages = new[] { message }.Concat(State.Messages).ToArray();
             Touch();
         }
 

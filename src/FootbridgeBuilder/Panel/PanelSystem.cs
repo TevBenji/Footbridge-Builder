@@ -4,11 +4,13 @@
 // PLT; RESEARCH-NOTES rule 22). The UI parses it (JSON.parse). The value is rebuilt only when
 // its inputs changed (version stamps) and pushed only when the JSON actually differs
 // (ValueBinding compares) — not ~100 bindings per frame like GRG.
-// Adapted from Placemaker (jackwrichards, GPL-3.0). Modified by TevBenji, 2026-11: one Footbridge Builder state value and the tool's open and close triggers.
+// Adapted from Placemaker (jackwrichards, GPL-3.0). Modified by TevBenji, 2026-11: one Footbridge Builder state value, the bridge on show and its settings, and clamped setting triggers.
 using System;
 using System.Globalization;
 using System.Text;
 using Colossal.UI.Binding;
+using FootbridgeBuilder.Core;
+using FootbridgeBuilder.Settings;
 using FootbridgeBuilder.Tool;
 using Game.UI;
 using UnityEngine.Scripting;
@@ -33,6 +35,26 @@ namespace FootbridgeBuilder.Panel
                 AddBinding(_state = new ValueBinding<string>(Group, "state", "{}"));
                 Trigger("toggleTool", () => _tool.Toggle());
                 Trigger("close", () => _tool.Close());
+                Trigger("build", () => _tool.Build());
+                Trigger<string>("setDesign", value => ChangeSettings(settings =>
+                {
+                    if (!Enum.TryParse(value, out Design design) || !Enum.IsDefined(typeof(Design), design)) return false;
+                    settings.Design = design.ToString();
+                    return true;
+                }));
+                Trigger<string>("setPath", value => ChangeSettings(settings =>
+                {
+                    if (Array.IndexOf(_tool.State.PathNames, value) < 0) return false;
+                    settings.PathName = value;
+                    return true;
+                }));
+                Trigger<bool>("setRemoveCrossings", value => ChangeSettings(settings => { settings.RemoveCrossings = value; return true; }));
+                NumberTrigger("setReach", 20, 150, (settings, value) => settings.CrossingReach = (int)Math.Round(value));
+                NumberTrigger("setExtraClearance", 0, 3, (settings, value) => settings.ExtraClearance = (float)(Math.Round(value * 4) / 4));
+                Trigger<double>("setTurn", value =>
+                {
+                    if (!double.IsNaN(value) && !double.IsInfinity(value)) _tool.SetTurn((float)Math.Max(-30, Math.Min(30, value)));
+                });
             }
             catch (Exception exception)
             {
@@ -44,10 +66,30 @@ namespace FootbridgeBuilder.Panel
         private void Trigger(string name, Action action) =>
             AddBinding(new TriggerBinding(Group, name, () => Safe(name, action)));
 
+        private void Trigger<T>(string name, Action<T> action) =>
+            AddBinding(new TriggerBinding<T>(Group, name, value => Safe(name, () => action(value))));
+
         private static void Safe(string name, Action action)
         {
             try { action(); }
             catch (Exception exception) { Mod.Logger.Error(exception, "Footbridge Builder: panel trigger '" + name + "' failed"); }
+        }
+
+        private void NumberTrigger(string name, double minimum, double maximum, Action<FootbridgeSettings, double> write) =>
+            Trigger<double>(name, value => ChangeSettings(settings =>
+            {
+                if (double.IsNaN(value) || double.IsInfinity(value)) return false;
+                write(settings, Math.Max(minimum, Math.Min(maximum, value)));
+                return true;
+            }));
+
+        private void ChangeSettings(Func<FootbridgeSettings, bool> write)
+        {
+            var settings = Mod.Settings;
+            if (settings == null || _tool.State.Stage == ToolStage.Building || !write(settings)) return;
+            // Replanning still happens if saving fails, so the panel never leaves a stale bridge buildable.
+            try { settings.ApplyAndSave(); }
+            finally { _tool.SettingsChanged(); }
         }
 
         [Preserve]
@@ -59,7 +101,7 @@ namespace FootbridgeBuilder.Panel
                 if (_state == null || _tool == null) return;
                 var state = _tool.State;
                 if (_published && _version == state.Version) return;
-                _state.Update(StateJson(state));
+                _state.Update(StateJson(state, Mod.Settings));
                 _version = state.Version;
                 _published = true;
                 _updateFailed = false;
@@ -72,20 +114,51 @@ namespace FootbridgeBuilder.Panel
             }
         }
 
-        private static string StateJson(ToolState state)
+        private static string StateJson(ToolState state, FootbridgeSettings settings)
         {
             var json = new StringBuilder("{\"stage\":");
             String(json, state.Stage.ToString());
             json.Append(",\"summary\":"); String(json, state.Summary);
-            json.Append(",\"messages\":[");
-            var messages = state.Messages ?? Array.Empty<string>();
-            for (int index = 0; index < messages.Length; index++)
+            json.Append(",\"messages\":"); Strings(json, state.Messages);
+            json.Append(",\"progress\":").Append(Number(state.Progress));
+            json.Append(",\"buildable\":").Append(state.Buildable ? "true" : "false");
+            json.Append(",\"designName\":"); String(json, state.DesignName);
+            json.Append(",\"deckHeight\":").Append(Number(state.DeckHeight));
+            json.Append(",\"useLabel\":"); String(json, state.UseLabel);
+            json.Append(",\"useShare\":").Append(Number(state.UseShare));
+            json.Append(",\"extraWalk\":").Append(Number(state.ExtraWalk));
+            json.Append(",\"cost\":").Append(state.Cost.ToString(CultureInfo.InvariantCulture));
+            json.Append(",\"crossingsRemoved\":").Append(state.CrossingsRemoved.ToString(CultureInfo.InvariantCulture));
+            json.Append(",\"competingMarked\":").Append(state.CompetingMarked ? "true" : "false");
+            json.Append(",\"buildingsReplaced\":").Append(state.BuildingsReplaced.ToString(CultureInfo.InvariantCulture));
+            json.Append(",\"refused\":").Append(state.Refused.ToString(CultureInfo.InvariantCulture));
+            json.Append(",\"turn\":").Append(Number(state.Turn));
+            json.Append(",\"paths\":[");
+            for (int index = 0; index < state.PathNames.Length; index++)
             {
                 if (index > 0) json.Append(',');
-                String(json, messages[index]);
+                json.Append("{\"name\":"); String(json, state.PathNames[index]);
+                json.Append(",\"label\":"); String(json, index < state.PathLabels.Length ? state.PathLabels[index] : state.PathNames[index]);
+                json.Append('}');
             }
-            json.Append("],\"progress\":").Append(Number(state.Progress));
-            return json.Append('}').ToString();
+            json.Append("],\"settings\":{\"design\":"); String(json, settings?.Design ?? "Auto");
+            json.Append(",\"path\":"); String(json, settings?.PathName ?? "");
+            json.Append(",\"removeCrossings\":").Append(settings == null || settings.RemoveCrossings ? "true" : "false");
+            json.Append(",\"reach\":").Append(Number(settings?.CrossingReach ?? 60));
+            json.Append(",\"extraClearance\":").Append(Number(settings?.ExtraClearance ?? 0.5f));
+            return json.Append("}}").ToString();
+        }
+
+        private static void Strings(StringBuilder json, string[] values)
+        {
+            json.Append('[');
+            var list = values ?? Array.Empty<string>();
+            for (int index = 0; index < list.Length; index++)
+            {
+                if (index > 0) json.Append(',');
+                String(json, list[index]);
+            }
+            json.Append(']');
         }
 
         private static string Number(float value) => float.IsNaN(value) || float.IsInfinity(value)

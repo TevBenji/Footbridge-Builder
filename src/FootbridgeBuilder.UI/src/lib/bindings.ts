@@ -20,14 +20,23 @@ export function useToolState() {
     return useMemo(() => readState(raw), [raw]);
 }
 
-export type Action = "toggleTool" | "close";
-export function act(name: Action): void {
-    try { trigger(GROUP, name); }
-    catch (error) { console.error(`[FootbridgeBuilder] Trigger ${name} failed`, error); }
+export type Action = "toggleTool" | "close" | "build";
+export type TextTrigger = "setDesign" | "setPath";
+export type NumberTrigger = "setReach" | "setExtraClearance" | "setTurn";
+export type ToggleTrigger = "setRemoveCrossings";
+export function act(name: Action): void;
+export function act(name: TextTrigger, value: string): void;
+export function act(name: NumberTrigger, value: number): void;
+export function act(name: ToggleTrigger, value: boolean): void;
+export function act(name: Action | TextTrigger | NumberTrigger | ToggleTrigger, value?: string | number | boolean): void {
+    try {
+        if (value === undefined) trigger(GROUP, name);
+        else trigger(GROUP, name, value);
+    } catch (error) { console.error(`[FootbridgeBuilder] Trigger ${name} failed`, error); }
 }
 
 /** The game's own UI sounds, through its audio binding; silent when the binding is missing. */
-export function playSound(sound: "hover-item" | "select-item"): void {
+export function playSound(sound: "hover-item" | "select-item" | "toggle-on" | "toggle-off"): void {
     try { trigger("audio", "playSound", sound, 1); }
     catch { /* no audio binding */ }
 }

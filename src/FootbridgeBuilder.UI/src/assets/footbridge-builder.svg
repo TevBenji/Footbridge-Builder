@@ -1,4 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-  <!-- Footbridge Builder. Original artwork by TevBenji, 2026-11. GPL-3.0. -->
-  <path d="M3 36 15 19H33L45 36M15 19v-5M33 19v-5M15 14H33M14 19v17M34 19v17M21 36h6M21 42h6M4 42h10M34 42h10"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- Footbridge Builder. Original artwork by TevBenji, 2026-11. GPL-3.0. A footbridge from the side: ramps up, a deck over the
+       road with a cim walking across, the pillars standing clear of the traffic. -->
+  <path d="M2.5 42.5h43" stroke="#6fb24a" stroke-width="3" stroke-linecap="round"/>
+  <path d="M15 36h18v6.5H15z" fill="#3a434d"/>
+  <path d="M18 39.2h3m3 0h3" stroke="#f6c445" stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M13 25v16.5M35 25v16.5" stroke="#8d99a6" stroke-width="2.6"/>
+  <path d="M3.5 41 11 24.5M44.5 41 37 24.5" stroke="#1f6fb5" stroke-width="5" stroke-linecap="round"/>
+  <path d="M3.5 41 11 24.5M44.5 41 37 24.5" stroke="#3fa9f5" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M9 21h30v4.5H9z" fill="#3fa9f5" stroke="#1f6fb5" stroke-width="1.6" stroke-linejoin="round"/>
+  <circle cx="24" cy="11.6" r="2.1" fill="#f6c445"/>
+  <path d="M24 14.2v4.2M24 18.4l-1.8 2.6M24 18.4l1.8 2.6M24 15.2l-2 2.2M24 15.2l2 2.2" stroke="#f6c445" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M9.5 17h29M11.5 17v4M18 17v4M30 17v4M36.5 17v4" stroke="#e3f1fb" stroke-width="1.3" stroke-linecap="round"/>
 </svg>
