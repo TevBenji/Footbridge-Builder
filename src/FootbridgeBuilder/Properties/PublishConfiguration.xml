@@ -51,6 +51,8 @@ Inspired by kianzarrin's Automatic Pedestrian Bridge Builder for the first game.
 	<ModVersion Value="0.1.0" />
 	<GameVersion Value="1.6.*" />
 	<ChangeLog Value="First release." />
+	<!--The forum thread whose replies show as the Discussion on the mod page-->
+	<ForumLink Value="https://forum.paradoxplaza.com/forum/threads/mod-footbridge-builder-one-click-pedestrian-bridges-discussion-feedback.1948815/" />
 	<ExternalLink Type="github" Url="https://github.com/TevBenji/Footbridge-Builder" />
 	<!--Public, Unlisted or Private, exactly as written-->
 	<AccessLevel Value="Public" />
