@@ -205,13 +205,15 @@ namespace FootbridgeBuilder.Core
             /// Too close to a crossing's node for the deck. Over a road node the game splits the deck at the road's edge and puts
             /// pillars there, which it then refuses (seen on a large road in the test city), so the deck keeps to one side.
             /// </summary>
-            public bool OverANode(float station)
+            /// <param name="reach">How far along the road either side of the station the deck crosses it: a turned or leaning
+            /// deck crosses the road over a stretch, and no node may lie under any of it.</param>
+            public bool OverANode(float station, float reach = 0f)
             {
                 foreach (var crossing in Request.Crossings ?? Array.Empty<Crossing>())
                 {
                     float at = Road.Nearest(crossing.Position);
                     if (math.distance(Road.Point(at).xz, crossing.Position) > Request.RoadWidth * 0.5f + 4f) continue;
-                    if (math.abs(station - at) < crossing.ClearDistance - 0.01f) return true;
+                    if (math.max(0f, math.abs(station - at) - reach) < crossing.ClearDistance - 0.01f) return true;
                 }
                 return false;
             }
@@ -284,38 +286,33 @@ namespace FootbridgeBuilder.Core
                 float tan = math.tan(math.radians(deck.Lean));
                 float deckY = RoadTop(station, landing * math.abs(tan)) + clearance;
                 float2 landingA = Road.Offset(station - landing * tan, -landing), landingB = Road.Offset(station + landing * tan, landing);
+                // A turned or leaning deck crosses the road over a stretch: the game splits it at any node under that stretch.
+                if (!ignoreObstacles && tan != 0f && OverANode(station, landing * math.abs(tan)))
+                {
+                    whyA = whyB = "the deck would pass over a road node";
+                    return null;
+                }
                 // A junction or street under the deck that sits a little higher than the road (on a slope): the deck rises to
                 // clear it. Anything much higher (an elevated road) is left for the obstacle check to refuse.
                 float under = DeckNeed(landingA, landingB) + math.max(0f, Request.ExtraClearance);
                 if (under > deckY && under <= deckY + MostRise) deckY = under + 0.05f;
-                Side a = null, b = null;
-                for (int attempt = 0; attempt < 3; attempt++)
+                float startY = deckY;
+                if (!PickSides(deck.SideA, deck.SideB, station, tan, landingA, landingB, ref deckY, out var a, out var b, out whyA, out whyB))
                 {
-                    a = BestSide(-1f, deck.SideA, station, tan, deckY, math.normalizesafe(landingA - landingB));
-                    b = BestSide(+1f, deck.SideB, station, tan, deckY, math.normalizesafe(landingB - landingA));
-                    if (!a.Valid || !b.Valid)
+                    // Each side picks its own ramp, and a switchback lands further out than the others: a deck too long
+                    // with one may still fit with plain ramps, on one side (the other may need its switchback) or both.
+                    if (whyA != TooWide) return null;
+                    var plainA = Array.FindAll(deck.SideA, leg => !Switchback(leg));
+                    var plainB = Array.FindAll(deck.SideB, leg => !Switchback(leg));
+                    bool fitted = false;
+                    foreach (var (stylesA, stylesB) in new[] { (plainA, deck.SideB), (deck.SideA, plainB), (plainA, plainB) })
                     {
-                        whyA = a.Valid ? "" : a.Problem;
-                        whyB = b.Valid ? "" : b.Problem;
-                        return null;
+                        if (stylesA.Length == 0 || stylesB.Length == 0 || (stylesA.Length == deck.SideA.Length && stylesB.Length == deck.SideB.Length)) continue;
+                        deckY = startY;
+                        if (PickSides(stylesA, stylesB, station, tan, landingA, landingB, ref deckY, out a, out b, out whyA, out whyB)) { fitted = true; break; }
                     }
-                    float shortfall = DeckShortfall(a.Landing, b.Landing, deckY);
-                    if (shortfall <= 0.01f) break;
-                    if (attempt == 2)
-                    {
-                        // The preview keeps the last shape whose ramps match its deck.
-                        if (ignoreObstacles) break;
-                        whyA = whyB = "the deck can't clear the road here";
-                        return null;
-                    }
-                    deckY += shortfall + 0.05f;
-                }
-
-                // Half a metre under the limit: a 40.0 m deck over a 32 m road was refused by a game whose limit is 40 m.
-                if (math.distance(a.Landing, b.Landing) > (Request.Path ?? new PathSpec()).MaxSpan - 0.5f && !ignoreObstacles)
-                {
-                    whyA = whyB = "the road is too wide for one span of this path";
-                    return null;
+                    // The span is what stopped it: say so, not why the fallbacks didn't fit either.
+                    if (!fitted) { whyA = whyB = TooWide; return null; }
                 }
                 var candidate = new Candidate { Deck = deck, A = a, B = b, Station = station, DeckY = deckY, Shift = shift };
                 string deckProblem = CheckLine(a.Landing, deckY, b.Landing, deckY, deck: true, candidate.Buildings);
@@ -325,6 +322,49 @@ namespace FootbridgeBuilder.Core
                 candidate.Footprint = a.Footprint + b.Footprint;
                 candidate.Use = Estimate(candidate);
                 return candidate;
+            }
+
+            private const string TooWide = "the road is too wide for one span of this path";
+
+            private static bool Switchback(Leg leg) => leg == Leg.SwitchbackForward || leg == Leg.SwitchbackBackward;
+
+            /// <summary>
+            /// Each side's best ramp, the deck raised until it clears the road between their landings, and the span checked;
+            /// false with the reasons when it doesn't work.
+            /// </summary>
+            private bool PickSides(Leg[] stylesA, Leg[] stylesB, float station, float tan, float2 landingA, float2 landingB, ref float deckY,
+                out Side a, out Side b, out string whyA, out string whyB)
+            {
+                whyA = whyB = "";
+                a = b = null;
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    a = BestSide(-1f, stylesA, station, tan, deckY, math.normalizesafe(landingA - landingB));
+                    b = BestSide(+1f, stylesB, station, tan, deckY, math.normalizesafe(landingB - landingA));
+                    if (!a.Valid || !b.Valid)
+                    {
+                        whyA = a.Valid ? "" : a.Problem;
+                        whyB = b.Valid ? "" : b.Problem;
+                        return false;
+                    }
+                    float shortfall = DeckShortfall(a.Landing, b.Landing, deckY);
+                    if (shortfall <= 0.01f) break;
+                    if (attempt == 2)
+                    {
+                        // The preview keeps the last shape whose ramps match its deck.
+                        if (ignoreObstacles) break;
+                        whyA = whyB = "the deck can't clear the road here";
+                        return false;
+                    }
+                    deckY += shortfall + 0.05f;
+                }
+                // Half a metre under the limit: a 40.0 m deck over a 32 m road was refused by a game whose limit is 40 m.
+                if (math.distance(a.Landing, b.Landing) > (Request.Path ?? new PathSpec()).MaxSpan - 0.5f && !ignoreObstacles)
+                {
+                    whyA = whyB = TooWide;
+                    return false;
+                }
+                return true;
             }
 
             private Side BestSide(float sign, Leg[] styles, float station, float tan, float deckY, float2 outward)
@@ -346,7 +386,7 @@ namespace FootbridgeBuilder.Core
 
             private Side BuildSide(float sign, Leg style, float station, float tan, float deckY, float2 outward)
             {
-                bool switchback = style == Leg.SwitchbackForward || style == Leg.SwitchbackBackward;
+                bool switchback = Switchback(style);
                 bool spiral = style == Leg.SpiralForward || style == Leg.SpiralBackward;
                 // A spiral comes back square to the road on its own, so it starts at the kerb line.
                 float offset = switchback ? landing + 2f * bendRadius : spiral ? kerb : landing;
@@ -379,7 +419,7 @@ namespace FootbridgeBuilder.Core
                                 var buildings = new HashSet<long>();
                                 var route = Route.Along(Road, landingStation, direction, sign * offset, RouteLength(height, grade));
                                 var found = WalkDown(route, deckY, grade);
-                                reuse = (found, found == null ? NoGround : Finish(found, sign, buildings), buildings);
+                                reuse = (found, found == null ? NoGround : Finish(found, buildings), buildings);
                                 alongWalks[direction] = reuse;
                             }
                             if (reuse.Problem.Length > 0) { side.Problem = reuse.Problem; return side; }
@@ -440,7 +480,7 @@ namespace FootbridgeBuilder.Core
                 foreach (var route in routes)
                 {
                     var walk = WalkDown(route, deckY, legGrade);
-                    string problem = walk == null ? NoGround : Finish(walk, sign, side.Buildings);
+                    string problem = walk == null ? NoGround : Finish(walk, side.Buildings);
                     if (problem.Length > 0) { side.Problem = problem; return side; }
                     side.Walks.Add(walk);
                     side.Footprint += walk.Distances[walk.Distances.Count - 1];
@@ -458,19 +498,29 @@ namespace FootbridgeBuilder.Core
             /// Turns the foot to face the road with a short bend on the ground, then checks the foot's place by the sidewalk and
             /// everything the leg passes; "" when it's fine.
             /// </summary>
-            private string Finish(Walk walk, float sign, HashSet<long> buildings)
+            private string Finish(Walk walk, HashSet<long> buildings)
             {
                 float footDistance = walk.Distances[walk.Distances.Count - 1];
                 float2 foot = walk.Route.Position(footDistance);
                 float2 heading = walk.Route.Heading(math.max(0f, footDistance - 0.25f));
                 float2 toRoad = math.normalizesafe(Road.Point(Road.Nearest(foot)).xz - foot);
                 float facing = math.acos(math.clamp(math.dot(heading, toRoad), -1f, 1f));
-                float room = walk.Route.Length - 0.3f - footDistance;
+                // A route that comes back at the road ends on the kerb line, a kerb gap off the road's edge: the foot goes there.
+                float room = walk.Route.Length - footDistance;
                 if (facing <= math.radians(40f) && room >= minPiece)
                 {
                     // Already facing the road with room before the kerb: a short piece on the ground, straight on.
                     walk.Distances.Add(footDistance + room);
                     walk.Heights.Add(Request.Ground(walk.Route.Position(footDistance + room)));
+                    walk.Length3D += room;
+                    foot = walk.Route.Position(footDistance + room);
+                }
+                else if (facing <= math.radians(40f) && room > 0.01f
+                    && footDistance + room - walk.Distances[walk.Distances.Count - 2] <= RaisedPieceLength)
+                {
+                    // Too little room for a piece of its own: the last piece runs on along the ground to the kerb line.
+                    walk.Distances[walk.Distances.Count - 1] = footDistance + room;
+                    walk.Heights[walk.Heights.Count - 1] = Request.Ground(walk.Route.Position(footDistance + room));
                     walk.Length3D += room;
                     foot = walk.Route.Position(footDistance + room);
                 }
@@ -530,6 +580,8 @@ namespace FootbridgeBuilder.Core
             /// </summary>
             private Walk WalkDown(Route route, float startY, float legGrade)
             {
+                // Near the end of the road a leg heading for it has no room at all: no ramp, so the next shape gets its turn.
+                if (route.Length < minPiece) return null;
                 var walk = new Walk { Route = route };
                 walk.Distances.Add(0f);
                 walk.Heights.Add(startY);

@@ -39,7 +39,7 @@ Group: `FootbridgeBuilder`. Value: `state`, a `ValueBinding<string>` carrying JS
 | `refused` | number | Temporaries the game marks with an error |
 | `turn` | number | Degrees, -30 to 30 |
 | `paths` | `{name, label}[]` | Footpaths that can be raised |
-| `settings` | object | `design`, `path`, `removeCrossings`, `reach` (20-150), `extraClearance` (0-3) |
+| `settings` | object | `design`, `path`, `removeCrossings`, `reach` (20-150), `extraClearance` (0.5-3) |
 
 | Trigger | Argument | Does |
 |---|---|---|
@@ -50,7 +50,7 @@ Group: `FootbridgeBuilder`. Value: `state`, a `ValueBinding<string>` carrying JS
 | `setPath` | string | A path's prefab name from `paths` |
 | `setRemoveCrossings` | boolean | Remove crossings in reach |
 | `setReach` | number | Clamped to 20-150 m, saved |
-| `setExtraClearance` | number | Clamped to 0-3 m in 0.25 steps, saved |
+| `setExtraClearance` | number | Clamped to 0.5-3 m in 0.25 steps, saved |
 | `setTurn` | number | Clamped to -30..30 in 5 degree steps, not saved |
 
 Numeric triggers clamp in C#, save with `ApplyAndSave()` and then tell the tool, which plans again.

@@ -1,16 +1,9 @@
-// Guard against the native crash in TerrainSystem.CullForCascades (parks makeover, 2026-10-30; docs/runbooks/parks.md).
+// Guard against a native crash in TerrainSystem.CullForCascades after several builds in one game. The terrain's road cull
+// list can be filled past its capacity when many new nets arrive at once, and the crash surfaces at its next resize.
 //
-// The crash (runs 20261030-001417-bushes and the one in AGENTS.md, both on the 4th build of a fresh game): a heap free fails
-// inside NativeList<LaneSection>.set_Capacity in TerrainSystem.CullForCascades. Decompiled (Game.Simulation.TerrainSystem):
-// the road cull list is sized to 6 sections per road entity (m_RoadsGroup count x 6, + max(n/4, 250)) and filled by
-// CullRoadsJob with AddNoResize, which does not check the capacity in a release build. One edge writes up to 18 sections
-// (AddSegment writes 1-3 per segment, 2 segments for the edge and up to 2 for each end node); terrain-shifting nets (paths that
-// flatten the ground, with offsets) write the extra ones. A build of many short park paths pushes the list past its capacity:
-// the job writes over the next heap block and the crash surfaces at the next resize.
-//
-// Before our nets are emitted (build and ghost), the list gets room for what is already there twice over plus 18 sections for
-// every net we add: the vanilla code still grows it by its own rule, we only make sure it never overflows. Every job that reads or
-// writes the list is completed first (the cull, the clip-map and the cascade lane jobs), as the game does before it resizes.
+// Before our nets are emitted (build and ghost), the list gets room for what is already there twice over plus enough for every
+// net we add: the game still grows it by its own rule, we only make sure it never overflows. Every job that reads or writes the
+// list is completed first, as the game does before it resizes.
 // Adapted from Placemaker (jackwrichards, GPL-3.0). Modified by TevBenji, 2026-11: namespace changed; logging through the mod's logger.
 
 using System;

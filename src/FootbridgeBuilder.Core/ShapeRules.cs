@@ -39,8 +39,10 @@ namespace FootbridgeBuilder.Core
                 Add(problems, length < cut + 0.2f, "a piece is too short and would fold");
                 Add(problems, float.IsNaN(cut), "two pieces meet at too sharp an angle");
                 Add(problems, TightestRadius(plan, piece) < minRadius - 0.05f, "a bend is too tight");
+                // The game's own margins (SteepSlope): the whole piece at its slope plus 0.0005, and each half at twice it.
                 float rise = math.abs(plan.Position(piece.End).y - plan.Position(piece.Start).y);
-                Add(problems, rise / math.max(1e-3f, length) > path.MaxSlope + 1e-3f, "a ramp is steeper than the path allows");
+                Add(problems, rise / math.max(1e-3f, length) > path.MaxSlope + 0.0005f || HalfTooSteep(plan, piece, path.MaxSlope * 2f),
+                    "a ramp is steeper than the path allows");
             }
             return problems;
         }
@@ -70,17 +72,27 @@ namespace FootbridgeBuilder.Core
             return u * u * u * a + 3f * u * u * t * piece.B + 3f * u * t * t * piece.C + t * t * t * d;
         }
 
-        public static float Length(BridgePlan plan, PlannedPiece piece)
+        public static float Length(BridgePlan plan, PlannedPiece piece) => Length(plan, piece, 0, Samples);
+
+        // The plan length between two of the samples.
+        private static float Length(BridgePlan plan, PlannedPiece piece, int from, int to)
         {
             float length = 0f;
-            float2 previous = Point(plan, piece, 0f).xz;
-            for (int step = 1; step <= Samples; step++)
+            float2 previous = Point(plan, piece, from / (float)Samples).xz;
+            for (int step = from + 1; step <= to; step++)
             {
                 float2 point = Point(plan, piece, step / (float)Samples).xz;
                 length += math.distance(previous, point);
                 previous = point;
             }
             return length;
+        }
+
+        private static bool HalfTooSteep(BridgePlan plan, PlannedPiece piece, float limit)
+        {
+            float start = Point(plan, piece, 0f).y, middle = Point(plan, piece, 0.5f).y, end = Point(plan, piece, 1f).y;
+            return math.abs(middle - start) / math.max(1e-3f, Length(plan, piece, 0, Samples / 2)) > limit
+                || math.abs(end - middle) / math.max(1e-3f, Length(plan, piece, Samples / 2, Samples)) > limit;
         }
 
         private static float TightestRadius(BridgePlan plan, PlannedPiece piece)

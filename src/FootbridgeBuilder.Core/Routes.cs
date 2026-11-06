@@ -86,7 +86,6 @@ namespace FootbridgeBuilder.Core
         private readonly List<float> lengths = new List<float>();
 
         public float Length => lengths.Count == 0 ? 0f : lengths[lengths.Count - 1];
-        public int Count => points.Count;
 
         public void Add(float2 point)
         {
@@ -108,6 +107,8 @@ namespace FootbridgeBuilder.Core
 
         public float2 Heading(float distance)
         {
+            // A route cut short by the end of the road can be a single point: it has no heading of its own.
+            if (points.Count < 2) return new float2(1f, 0f);
             int index = Find(distance, out _);
             if (index + 1 >= points.Count) index = points.Count - 2;
             return math.normalizesafe(points[index + 1] - points[index], new float2(1f, 0f));
@@ -189,7 +190,5 @@ namespace FootbridgeBuilder.Core
         {
             for (int index = skipFirst; index < other.points.Count; index++) Add(other.points[index]);
         }
-
-        public IReadOnlyList<float2> Points => points;
     }
 }

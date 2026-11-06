@@ -23,14 +23,6 @@ namespace FootbridgeBuilder.Core
             return length;
         }
 
-        /// <summary>Distance along the line at every point, starting at 0.</summary>
-        public static float[] Stations(IReadOnlyList<float2> line)
-        {
-            var stations = new float[line.Count];
-            for (int index = 1; index < line.Count; index++) stations[index] = stations[index - 1] + math.distance(line[index - 1], line[index]);
-            return stations;
-        }
-
         /// <summary>Points every <paramref name="spacing"/> metres along the line (the last spacing stretched to end exactly).</summary>
         public static List<float2> Resample(IReadOnlyList<float2> line, float spacing)
         {
@@ -64,25 +56,6 @@ namespace FootbridgeBuilder.Core
             }
             result.Add(line[line.Count - 1]);
             return result;
-        }
-
-        /// <summary>Chaikin corner cutting; the two ends stay where they are.</summary>
-        public static List<float2> Chaikin(IReadOnlyList<float2> line, int rounds)
-        {
-            var current = new List<float2>(line);
-            for (int round = 0; round < rounds && current.Count >= 3; round++)
-            {
-                var next = new List<float2> { current[0] };
-                for (int index = 0; index < current.Count - 1; index++)
-                {
-                    float2 a = current[index], b = current[index + 1];
-                    if (index > 0) next.Add(math.lerp(a, b, 0.25f));
-                    if (index < current.Count - 2) next.Add(math.lerp(a, b, 0.75f));
-                }
-                next.Add(current[current.Count - 1]);
-                current = next;
-            }
-            return current;
         }
 
         /// <summary>Radius of the circle through three points; infinite when they are in line.</summary>
@@ -123,14 +96,6 @@ namespace FootbridgeBuilder.Core
                 dense.Add((2f * t3 - 3f * t2 + 1f) * p0 + (t3 - 2f * t2 + t) * m0 + (-2f * t3 + 3f * t2) * p1 + (t3 - t2) * m1);
             }
             return Resample(dense, spacing);
-        }
-
-        /// <summary>Unit tangent of a line at a point index, from its neighbours.</summary>
-        public static float2 Tangent(IReadOnlyList<float2> line, int index)
-        {
-            int before = math.max(0, index - 1), after = math.min(line.Count - 1, index + 1);
-            float2 direction = line[after] - line[before];
-            return math.lengthsq(direction) > 1e-9f ? math.normalize(direction) : new float2(1f, 0f);
         }
 
         /// <summary>The left of a direction in the game's plan (x right, z forward).</summary>

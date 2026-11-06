@@ -50,7 +50,8 @@ namespace FootbridgeBuilder.Panel
                 }));
                 Trigger<bool>("setRemoveCrossings", value => ChangeSettings(settings => { settings.RemoveCrossings = value; return true; }));
                 NumberTrigger("setReach", 20, 150, (settings, value) => settings.CrossingReach = (int)Math.Round(value));
-                NumberTrigger("setExtraClearance", 0, 3, (settings, value) => settings.ExtraClearance = (float)(Math.Round(value * 4) / 4));
+                // Below half a metre the game refused the deck in the test city (its own rounding adds to the road's and path's heights).
+                NumberTrigger("setExtraClearance", 0.5, 3, (settings, value) => settings.ExtraClearance = (float)(Math.Round(value * 4) / 4));
                 Trigger<double>("setTurn", value =>
                 {
                     if (!double.IsNaN(value) && !double.IsInfinity(value)) _tool.SetTurn((float)Math.Max(-30, Math.Min(30, value)));
