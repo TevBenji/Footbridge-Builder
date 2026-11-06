@@ -1,0 +1,255 @@
+/* Footbridge Builder. Original work by TevBenji, 2026-11. GPL-3.0.
+   Proportions follow Placemaker's panel (jackwrichards, GPL-3.0, UI/src/styles/_tokens.scss); colours and controls
+   follow the game's own UI (its theme variables and .primary-button in Cities2_Data/Content/Game/UI/index.css).
+   Gameface rules (tools/css-lint.js): flexbox without gap, rgba not hsla, var() only in longhands, rem units. */
+
+/* Full-screen layer: only the panel takes the mouse, so the map stays usable around it. */
+.dock {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    font-family: var(--fontFamily);
+}
+
+/* Docked on the right between the top bar and the bottom toolbar; the panel shrinks to its content. */
+.wrap {
+    position: absolute;
+    top: 64rem;
+    right: 12rem;
+    bottom: 120rem;
+    width: 380rem;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+}
+
+.panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    min-height: 0;
+    pointer-events: auto;
+    border-radius: 6rem;
+    border: 1rem solid rgba(255, 255, 255, 0.13);
+    /* The game's own panel colour and blur, so the panel matches the game's panels and theme. */
+    background-color: var(--panelColorNormal);
+    backdrop-filter: var(--panelBlur);
+    box-shadow: 0 10rem 34rem rgba(0, 0, 0, 0.45);
+    color: #eaf2f6;
+    overflow: hidden;
+}
+
+/* ── header ── */
+.header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    height: 42rem;
+    padding: 0 6rem 0 12rem;
+    background-color: var(--panelColorDark);
+    border-bottom: 1rem solid rgba(255, 255, 255, 0.1);
+}
+
+.accentBar {
+    width: 3rem;
+    height: 18rem;
+    margin-right: 10rem;
+    border-radius: 2rem;
+    background-color: var(--accentColorNormal);
+}
+
+.headerIcon {
+    width: 22rem;
+    height: 22rem;
+    margin-right: 8rem;
+    flex-shrink: 0;
+}
+
+.title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 14rem;
+    font-weight: bold;
+    color: #ffffff;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.close {
+    width: 30rem;
+    height: 30rem;
+    padding: 0;
+    background-color: transparent;
+}
+
+.closeIcon {
+    width: 14rem;
+    height: 14rem;
+}
+
+/* ── body ── */
+.content {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    padding: 12rem 12rem 14rem 12rem;
+}
+
+.status {
+    display: flex;
+    flex-direction: column;
+    padding: 9rem 12rem;
+    border-radius: 8rem;
+    border-left: 3rem solid rgba(255, 255, 255, 0.3);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.toneIdle { border-left-color: var(--accentColorNormal); }
+.toneGood { border-left-color: #6fdc8c; }
+.toneBusy { border-left-color: #ffb547; }
+.toneBad { border-left-color: #ff6b5b; }
+
+.statusText {
+    font-size: 14rem;
+    font-weight: bold;
+    line-height: 1.35;
+    color: #ffffff;
+}
+
+.progressTrack {
+    height: 4rem;
+    margin-top: 7rem;
+    border-radius: 2rem;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.progress {
+    height: 4rem;
+    border-radius: 2rem;
+    background-color: var(--accentColorNormal);
+}
+
+.hints {
+    margin-top: 6rem;
+    font-size: 12rem;
+    line-height: 1.4;
+    color: rgba(234, 242, 246, 0.5);
+}
+
+.message {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    margin-top: 6rem;
+}
+
+.messageDot {
+    width: 6rem;
+    height: 6rem;
+    margin: 6rem 8rem 0 0;
+    border-radius: 3rem;
+    flex-shrink: 0;
+    background-color: #ffb547;
+}
+
+.messageText {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12rem;
+    line-height: 1.45;
+    color: #f2d79a;
+}
+
+/* ── buttons ── */
+.button {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    height: 26rem;
+    padding: 0 10rem;
+    margin: 0;
+    border: 0 solid transparent;
+    border-radius: 4rem;
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #eaf2f6;
+    font-family: var(--fontFamily);
+    font-size: 13rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition-property: background-color, color, opacity;
+    transition-duration: 0.12s;
+}
+
+.button:hover { background-color: rgba(255, 255, 255, 0.12); }
+
+.disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.disabled:hover { background-color: rgba(255, 255, 255, 0.06); }
+
+/* ── footer ── */
+.footer {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 9rem 12rem 10rem 12rem;
+    border-top: 1rem solid rgba(255, 255, 255, 0.14);
+    background-color: rgba(0, 0, 0, 0.22);
+}
+
+/* The main action, as Paradox Mods' "Add to playsets": a green pill with a darker green edge and near-black capitals
+   (colours measured from the game's mod browser). */
+.primary {
+    flex: 1 1 auto;
+    height: 44rem;
+    padding: 0 10rem 0 20rem;
+    justify-content: space-between;
+    border: 2rem solid #2d9640;
+    border-radius: 22rem;
+    background-color: #35be4f;
+    color: #2c2c2c;
+    font-size: var(--fontSizeS);
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.primary:hover { background-color: #48c960; }
+.primary:active { background-color: #2fa846; }
+
+.primary.disabled {
+    opacity: 1;
+    justify-content: center;
+    border-color: rgba(255, 255, 255, 0.12);
+    background-color: rgba(255, 255, 255, 0.1);
+    color: rgba(234, 242, 246, 0.55);
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+}
+
+.primary.disabled:hover { background-color: rgba(255, 255, 255, 0.1); }
+
+/* ── toolbar tooltip (lib/tips.tsx) ── */
+.tip {
+    max-width: 300rem;
+    padding: 10rem 12rem;
+    font-size: 14rem;
+    line-height: 1.4;
+}
+
+.tip strong { font-size: 16rem; }
+
+.hotkey {
+    margin-top: 8rem;
+    color: rgba(234, 242, 246, 0.7);
+}

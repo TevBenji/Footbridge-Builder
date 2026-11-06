@@ -1,0 +1,66 @@
+<!-- Adapted from Placemaker (jackwrichards, GPL-3.0). Modified by TevBenji, 2026-11: standalone game references and UI packaging, without toolchain, versioning or deployment targets. -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\..\build\GameReferences.props" />
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <!-- Keep in step with ModVersion in Properties/PublishConfiguration.xml: the game's mod list shows this one. -->
+    <Version>0.1.0</Version>
+    <Nullable>disable</Nullable>
+    <OutputType>Library</OutputType>
+    <AssemblyName>FootbridgeBuilder</AssemblyName>
+    <RootNamespace>FootbridgeBuilder</RootNamespace>
+    <NoStdLib>true</NoStdLib>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <!-- The owner's local test runner: its own build configuration, so it can never reach bin\Release. Its folder isn't in the public repo. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Dev'">
+    <DefineConstants>$(DefineConstants);FB_DEV</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Configuration)' != 'Dev'">
+    <Compile Remove="Dev\**" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Dev'">
+    <DevReference Include="UnityEngine.ScreenCaptureModule;UnityEngine.ImageConversionModule;Colossal.AssetPipeline" />
+    <Reference Include="@(DevReference)">
+      <HintPath>$(ManagedPath)\%(Identity).dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib">
+      <HintPath>$(ManagedPath)\mscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System">
+      <HintPath>$(ManagedPath)\System.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.Core">
+      <HintPath>$(ManagedPath)\System.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="netstandard">
+      <HintPath>$(ManagedPath)\netstandard.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <GameReference Include="Game;Colossal.Logging;Colossal.Core;Colossal.Mathematics;Colossal.IO.AssetDatabase;Colossal.Localization;Colossal.UI;Colossal.UI.Binding;Unity.Entities;Unity.Collections;Unity.Mathematics;Unity.Burst;UnityEngine.CoreModule;Unity.InputSystem" />
+    <Reference Include="@(GameReference)">
+      <HintPath>$(ManagedPath)\%(Identity).dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <ProjectReference Include="..\FootbridgeBuilder.Core\FootbridgeBuilder.Core.csproj" />
+    <None Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\CREDITS.md" Link="CREDITS.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\README.md" Link="README.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="BuildUserInterface" BeforeTargets="Build">
+    <Warning Condition="'$(SkipUI)' == 'true' Or !Exists('$(MSBuildProjectDirectory)\..\FootbridgeBuilder.UI\node_modules')"
+             Text="UI bundle skipped: run npm ci in src/FootbridgeBuilder.UI" />
+    <Exec Condition="'$(SkipUI)' != 'true' And Exists('$(MSBuildProjectDirectory)\..\FootbridgeBuilder.UI\node_modules')"
+          WorkingDirectory="$(MSBuildProjectDirectory)\..\FootbridgeBuilder.UI"
+          EnvironmentVariables="FOOTBRIDGE_BUILDER_UI_OUT=$(TargetDir)"
+          Command="npm run build" />
+  </Target>
+</Project>

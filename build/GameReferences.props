@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <ManagedPath Condition="'$(ManagedPath)' == ''">D:\Steam\steamapps\common\Cities Skylines II\Cities2_Data\Managed</ManagedPath>
+  </PropertyGroup>
+</Project>
