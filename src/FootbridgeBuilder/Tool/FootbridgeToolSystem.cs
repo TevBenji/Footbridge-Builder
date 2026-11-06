@@ -40,9 +40,15 @@ namespace FootbridgeBuilder.Tool
         private const float AreaReach = 80f;
         private const int SettleFrames = 3, MostSettleFrames = 60, VerifyFrames = 30;
         private const float TurnStep = 5f, MostTurn = 30f;
+        // Pieces whose ends are raised more than this are outlined where they stand; the rest are laid on the ground.
+        private const float ElevatedOutline = 0.5f;
+        // The panel's green (#35be4f) when the bridge can be built here, red when it can't.
+        private static readonly UnityEngine.Color Fits = new UnityEngine.Color(0.208f, 0.745f, 0.31f, 1f);
+        private static readonly UnityEngine.Color DoesNotFit = new UnityEngine.Color(0.9f, 0.22f, 0.18f, 1f);
 
         private TerrainSystem terrain;
         private CitySystem city;
+        private Game.Rendering.OverlayRenderSystem overlay;
         private EntityQuery temporaryEdges, temporaries, refused, replaced, builtPaths, icons, joinedRoads;
         private List<PathKind> paths = new List<PathKind>();
         private List<DeckBridge> bridges = new List<DeckBridge>();
@@ -119,6 +125,7 @@ namespace FootbridgeBuilder.Tool
                 base.OnCreate();
                 terrain = World.GetOrCreateSystemManaged<TerrainSystem>();
                 city = World.GetOrCreateSystemManaged<CitySystem>();
+                overlay = World.GetOrCreateSystemManaged<Game.Rendering.OverlayRenderSystem>();
                 temporaryEdges = GetEntityQuery(ComponentType.ReadOnly<Edge>(), ComponentType.ReadOnly<Temp>());
                 temporaries = GetEntityQuery(ComponentType.ReadOnly<Temp>());
                 refused = GetEntityQuery(ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Error>());
@@ -253,6 +260,7 @@ namespace FootbridgeBuilder.Tool
                 bool handled = false;
                 DevTick(frame, ref handled);
                 if (handled) return inputDependencies;
+                DrawOutline();
                 if (State.Stage == ToolStage.Building) { BuildTick(frame); return inputDependencies; }
                 if (closing)
                 {
@@ -429,7 +437,7 @@ namespace FootbridgeBuilder.Tool
             plannedKey = taskInput.Key;
             PlanVersion++;
             if (!plan.Buildable && plan.Blockers.Count > 0)
-                Mod.Logger.Info("Footbridge Builder: nothing fits here. " + string.Join(" | ", plan.Messages) + " Blocked by: " + string.Join(" | ", plan.Blockers));
+                Mod.Logger.Info("Footbridge Builder: nothing fits here. " + string.Join(" | ", plan.Messages) + " Blocked by: " + string.Join(" | ", plan.Blockers.Select(Named)));
             planSnapshot = taskInput.Snapshot;
             planPath = taskInput.Path;
             planHit = taskInput.Hit;
@@ -453,6 +461,21 @@ namespace FootbridgeBuilder.Tool
             emitPending = plan.Buildable ? plan : null;
         }
 
+        // A blocker line ("Net 4295193185 (surface ...") with the prefab's name after the id, so a player's log says what was in the way.
+        private string Named(string blocker)
+        {
+            try
+            {
+                var parts = blocker.Split(' ');
+                if (parts.Length < 2 || !long.TryParse(parts[1], out long id) || id == 0) return blocker;
+                var entity = SiteArea.Unpack(id);
+                if (!EntityManager.Exists(entity) || !EntityManager.HasComponent<PrefabRef>(entity)) return blocker;
+                string name = World.GetOrCreateSystemManaged<PrefabSystem>().GetPrefab<PrefabBase>(EntityManager.GetComponentData<PrefabRef>(entity))?.name ?? "?";
+                return parts[0] + " " + parts[1] + " '" + name + "'" + blocker.Substring(parts[0].Length + parts[1].Length + 1);
+            }
+            catch (Exception) { return blocker; }
+        }
+
         private void DropPlan()
         {
             planCancel?.Cancel();
@@ -469,6 +492,59 @@ namespace FootbridgeBuilder.Tool
         }
 
         // ── the ghost ──
+
+        /// <summary>
+        /// An outline round the bridge on show, every frame: green where it can be built, red where it can't. Where nothing
+        /// fits there is no ghost (it would mark buildings to go and show a price), only the red outline of the bridge as it
+        /// would stand, so the player sees what they are placing while looking for room.
+        /// </summary>
+        private void DrawOutline()
+        {
+            try
+            {
+                if (plan == null || plan.Pieces.Count == 0 || State.Stage != ToolStage.Planned) return;
+                // A new ghost is green only once the game has had its say on it (a few frames), so a refused one never flashes green.
+                if (plan.Buildable && !settled) return;
+                bool fits = plan.Buildable && State.Refused == 0;
+                var colour = fits ? Fits : DoesNotFit;
+                var fill = new UnityEngine.Color(colour.r, colour.g, colour.b, 0.25f);
+                // Clear of the game's own blue outline round the ghost, so the green (or red) reads as a ring round it.
+                float half = (planPath?.Spec.Width ?? 3f) * 0.5f + 0.9f;
+                var buffer = overlay.GetBuffer(out JobHandle dependencies);
+                dependencies.Complete();
+                foreach (var piece in plan.Pieces)
+                {
+                    var curve = new Bezier4x3(plan.Position(piece.Start), piece.B, piece.C, plan.Position(piece.End));
+                    bool raised = plan.Nodes[piece.Start].Elevation > ElevatedOutline || plan.Nodes[piece.End].Elevation > ElevatedOutline;
+                    var style = raised ? (Game.Rendering.OverlayRenderSystem.StyleFlags)0 : Game.Rendering.OverlayRenderSystem.StyleFlags.Projected;
+                    // A light fill: on the ground under a ghost (its footprint), or where the path would stand when there is none.
+                    buffer.DrawCurve(fill, fill, 0f, plan.Buildable ? Game.Rendering.OverlayRenderSystem.StyleFlags.Projected : style, curve, half * 2f, float2.zero);
+                    // Both edges as short lines, so the outline runs on unbroken past the joins between pieces.
+                    int steps = math.max(2, (int)math.ceil(MathUtils.Length(curve) / 1.5f));
+                    float3 lastLeft = default, lastRight = default;
+                    for (int step = 0; step <= steps; step++)
+                    {
+                        float t = step / (float)steps;
+                        float3 at = MathUtils.Position(curve, t), tangent = MathUtils.Tangent(curve, t);
+                        float3 side = math.normalizesafe(new float3(-tangent.z, 0f, tangent.x)) * half;
+                        if (step > 0)
+                        {
+                            Edge(buffer, colour, style, lastLeft, at + side);
+                            Edge(buffer, colour, style, lastRight, at - side);
+                        }
+                        lastLeft = at + side;
+                        lastRight = at - side;
+                    }
+                    // Across each ramp's foot, closing the outline there.
+                    if (plan.Nodes[piece.End].GroundEnd) Edge(buffer, colour, style, lastLeft, lastRight);
+                }
+            }
+            catch (Exception exception) { LogUpdateError(exception, "Footbridge Builder: drawing the outline failed"); }
+        }
+
+        private static void Edge(Game.Rendering.OverlayRenderSystem.Buffer buffer, UnityEngine.Color colour,
+            Game.Rendering.OverlayRenderSystem.StyleFlags style, float3 from, float3 to) =>
+            buffer.DrawLine(colour, colour, 0f, style, new Line3.Segment(from, to), 0.6f, new float2(1f, 1f));
 
         /// <summary>True when this frame belongs to the ghost (a Clear or an emission), so input waits.</summary>
         private bool GhostTick(int frame)

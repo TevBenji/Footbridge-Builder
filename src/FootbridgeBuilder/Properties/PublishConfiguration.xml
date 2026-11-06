@@ -2,36 +2,51 @@
 	<!--Empty for the first upload. The publisher prints "Mod published with Id=NNNNNN": it goes here, or the next upload makes a second listing-->
 	<ModId Value="" />
 	<DisplayName Value="Footbridge Builder" />
-	<ShortDescription Value="Hover a road and click: a working pedestrian bridge appears, at the right height, joined to the sidewalks." />
+	<ShortDescription Value="Hover a road and click: a pedestrian bridge at the lowest height the game allows, with ramps that fit and feet that join the sidewalk. A green outline when it fits; no other mods needed." />
 	<!--Every upload sends exactly this page: change it here, not on the website, or the next upload overwrites the website-->
 	<LongDescription>
-Hover a road and click. Footbridge Builder puts a working pedestrian bridge over it: as low as the game allows, with ramps that fit beside the road and feet that join the sidewalk. No other mods needed.
+Building a footbridge by hand takes three mods and a lot of fiddling, and then the cims cross at street level anyway. Footbridge Builder does it for you: hover a road and the bridge appears, as low as the game allows, with ramps that fit beside the road and feet that join the sidewalk. Click, and it's built. No other mods needed.
 
-### Features
-* **A real preview.** The ghost is made of the game's own temporary nets: you see the pillars, the price and anything the game would refuse before you build.
-* **Ramps that fit.** Y-ramps, Z-ramps, switchbacks, spirals, a diagonal span or a snake deck. Auto tries them all and keeps the one most cims will use.
-* **Feet that join the sidewalk**, without cutting the road or painting a new crossing.
-* **Street crossings removed.** Marked crosswalks near the bridge lose their crosswalk, so cims prefer the bridge.
-* **Buildings left standing** where any shape fits; otherwise the button says how many will be replaced, as the game's road tool does.
-* **Wide roads** get the game's own arch or cable-stayed pedestrian bridge as the deck.
-* **Honest numbers:** the game's own price, the deck height, and how many cims will use the bridge, worked out from the game's pathfinding.
+### What it builds
 
-### How to use
-Open the tool with the bridge button beside Zones or **Ctrl+Shift+F**. Hover a road; turn the bridge with **[** and **]**; click to build. **Esc** clears the preview, and again closes the tool.
+- **A bridge at the lowest height the game allows**, on the game's own footpath and pillars, so you can bulldoze it like anything else
+- **Ramps that fit**: Y-ramps along the sidewalk, Z-ramps, switchbacks, spirals, a diagonal span or a snake deck; **Auto** tries them all and keeps the one most cims will use
+- **Feet that join the sidewalk**, without cutting the road or painting a new crossing
+- **Street crossings removed** near the bridge, so cims take the bridge instead of the road
+- **Buildings left standing** wherever a shape fits; otherwise the button says how many go, as the game's road tool does
+- **Wide roads** get the game's own arch or cable-stayed pedestrian bridge as the deck
+
+### How to use it
+
+1. Click the **bridge** button in the bottom toolbar beside Zones, or press **Ctrl+Shift+F**.
+2. Hover a road. The bridge appears as the game's own preview, with its pillars and price. Near a junction it snaps to the street crossing.
+3. A **green outline** means it fits. **Red** means nothing fits here, and the panel says why: move along the road, or turn it with **[** and **]**.
+4. Click to build. The panel says what was built: pieces, sidewalk joins, crossings removed and the cost.
+
+Pick a **Design** in the panel or leave it on Auto. Crossing reach, extra clearance and the turn are under **More settings**. **Esc** clears the bridge, and again closes the tool.
+
+### Good to know
+
+- The panel says how many cims will use the bridge, from the game's own pathfinding numbers. A removed crosswalk is still an unsafe crossing in the game, so some cims will run across.
+- The game has no stairs or lifts, so every design uses ramps.
+- One road at a time; junctions, roundabouts, rail and water are for later.
+- Early release: expect rough edges and tell me what you find.
 
 Built for game version **1.6.***.
 
 ### Credits
+
 Inspired by kianzarrin's Automatic Pedestrian Bridge Builder for the first game. Parts of the build code are adapted from **Placemaker** by jackwrichards (GPL-3.0), which in turn credits ParkManager and Grid Road Generator. Footbridge Builder is GPL-3.0 too; the full source is on GitHub (link on this page).
 	</LongDescription>
 	<!--A missing picture is silently replaced by a default one-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
-	<!--Up to 10, each under 2.1 MB-->
+	<!--At most 10, each under 2.1 MB: Paradox Mods refuses more-->
 	<Screenshot Value="Properties/Screenshots/01.png" />
 	<Screenshot Value="Properties/Screenshots/02.png" />
 	<Screenshot Value="Properties/Screenshots/03.png" />
 	<Screenshot Value="Properties/Screenshots/04.png" />
 	<Screenshot Value="Properties/Screenshots/05.png" />
+	<Screenshot Value="Properties/Screenshots/06.png" />
 	<Tag Value="Code Mod" />
 	<ModVersion Value="0.1.0" />
 	<GameVersion Value="1.6.*" />
