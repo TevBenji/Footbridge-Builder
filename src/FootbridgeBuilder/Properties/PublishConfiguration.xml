@@ -1,6 +1,6 @@
 <Publish>
 	<!--Empty for the first upload. The publisher prints "Mod published with Id=NNNNNN": it goes here, or the next upload makes a second listing-->
-	<ModId Value="" />
+	<ModId Value="166416" />
 	<DisplayName Value="Footbridge Builder" />
 	<ShortDescription Value="Hover a road and click: a pedestrian bridge at the lowest height the game allows, with ramps that fit and feet that join the sidewalk. A green outline when it fits; no other mods needed." />
 	<!--Every upload sends exactly this page: change it here, not on the website, or the next upload overwrites the website-->
