@@ -35,6 +35,8 @@ namespace FootbridgeBuilder.Core
         private const float SnakeBend = 18f;
         private const float LongestSpiralRadius = 20f;
         private const float MostTurnPerPiece = math.PI / 3f;
+        /// <summary>How far the deck rises over the bridged road's own height to clear a street under it that sits higher (on a slope).</summary>
+        private const float MostRise = 3f;
         private static readonly float[] Shifts = { 0f, 4f, -4f, 8f, -8f, 12f, -12f, 16f, -16f, 20f, -20f, 24f, -24f };
 
         private enum Leg { Both, Forward, Backward, SwitchbackForward, SwitchbackBackward, SpiralForward, SpiralBackward, SnakeForward, SnakeBackward }
@@ -119,6 +121,17 @@ namespace FootbridgeBuilder.Core
             if (fallback != null) return context.Assemble(fallback, plan);
 
             plan.Buildable = false;
+            // The bridge as it would stand with nothing in the way, so the player sees its shape (in red) while looking for room.
+            var preview = context.Preview(station);
+            if (preview != null)
+            {
+                var shape = context.Assemble(preview, new BridgePlan());
+                plan.Nodes.AddRange(shape.Nodes);
+                plan.Pieces.AddRange(shape.Pieces);
+                plan.Design = shape.Design;
+                plan.DesignName = shape.DesignName;
+                plan.DeckHeight = shape.DeckHeight;
+            }
             if (reasonA.Length > 0) plan.Messages.Add($"No room for a ramp on the {context.SideName(-1, station)} side: {reasonA}.");
             if (reasonB.Length > 0) plan.Messages.Add($"No room for a ramp on the {context.SideName(+1, station)} side: {reasonB}.");
             if (reasonA.Length == 0 && reasonB.Length == 0) plan.Messages.Add("No bridge fits here.");
@@ -144,6 +157,8 @@ namespace FootbridgeBuilder.Core
             public readonly BridgeRequest Request;
             public readonly RoadLine Road;
             public List<string> Blockers;
+            // While working out the preview shape: only the bridged road itself is in the way.
+            private bool ignoreObstacles;
             // Each outline with the circle around it: most outlines near a point are rejected by the circle alone.
             private readonly SpatialBuckets<(Obstacle Outline, float2 Centre, float Radius)> obstacles = new SpatialBuckets<(Obstacle, float2, float)>(16f);
             private readonly float half, grade, minRadius, bendRadius, kerb, landing, spurRadius, minPiece, clearance, highest;
@@ -265,10 +280,14 @@ namespace FootbridgeBuilder.Core
                 whyA = whyB = "";
                 float tan = math.tan(math.radians(deck.Lean));
                 float deckY = RoadTop(station, landing * math.abs(tan)) + clearance;
+                float2 landingA = Road.Offset(station - landing * tan, -landing), landingB = Road.Offset(station + landing * tan, landing);
+                // A junction or street under the deck that sits a little higher than the road (on a slope): the deck rises to
+                // clear it. Anything much higher (an elevated road) is left for the obstacle check to refuse.
+                float under = NetTop(landingA, landingB) + clearance;
+                if (under > deckY && under <= deckY + MostRise) deckY = under + 0.05f;
                 Side a = null, b = null;
                 for (int attempt = 0; attempt < 3; attempt++)
                 {
-                    float2 landingA = Road.Offset(station - landing * tan, -landing), landingB = Road.Offset(station + landing * tan, landing);
                     a = BestSide(-1f, deck.SideA, station, tan, deckY, math.normalizesafe(landingA - landingB));
                     b = BestSide(+1f, deck.SideB, station, tan, deckY, math.normalizesafe(landingB - landingA));
                     if (!a.Valid || !b.Valid)
@@ -575,6 +594,7 @@ namespace FootbridgeBuilder.Core
                 {
                     float far = reach + radius;
                     if (math.distancesq(point, centre) > far * far) continue;
+                    if (ignoreObstacles && obstacle.Kind != ObstacleKind.HostRoad) continue;
                     float distance = DistanceToQuad(point, obstacle);
                     if (distance > reach) continue;
                     blocker = obstacle;
@@ -612,6 +632,48 @@ namespace FootbridgeBuilder.Core
                     shortfall = math.max(shortfall, centre.y + clearance - deck);
                 }
                 return shortfall;
+            }
+
+            /// <summary>The highest net surface the deck's line passes over (the bridged road aside), or far below when none.</summary>
+            private float NetTop(float2 from, float2 to)
+            {
+                float top = float.MinValue, reach = half + 0.2f;
+                int steps = math.max(1, (int)math.ceil(math.distance(from, to)));
+                for (int step = 0; step <= steps; step++)
+                {
+                    float2 point = math.lerp(from, to, step / (float)steps);
+                    foreach (var (obstacle, centre, radius) in obstacles.Near(point))
+                    {
+                        if (obstacle.Kind != ObstacleKind.Net) continue;
+                        float far = reach + radius;
+                        if (math.distancesq(point, centre) > far * far || DistanceToQuad(point, obstacle) > reach) continue;
+                        top = math.max(top, obstacle.Surface);
+                    }
+                }
+                return top;
+            }
+
+            /// <summary>The best bridge at <paramref name="station"/> with only the bridged road in the way: for showing, never for building.</summary>
+            public Candidate Preview(float station)
+            {
+                var blockers = Blockers;
+                Blockers = null;
+                ignoreObstacles = true;
+                try
+                {
+                    Candidate best = null;
+                    foreach (var deck in DeckOptions())
+                    {
+                        var candidate = Evaluate(deck, station, 0f, out _, out _);
+                        if (candidate != null && Better(candidate, best)) best = candidate;
+                    }
+                    return best;
+                }
+                finally
+                {
+                    ignoreObstacles = false;
+                    Blockers = blockers;
+                }
             }
 
             private float RoadTop(float station, float reach)

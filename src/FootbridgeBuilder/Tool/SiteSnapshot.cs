@@ -141,13 +141,24 @@ namespace FootbridgeBuilder.Tool
                     var edges = entities.GetBuffer<ConnectedEdge>(node, true);
                     if (edges.Length < 3) continue;
                     float widest = 0f;
+                    float2 along = new float2(1f, 0f);
+                    bool turned = false;
                     foreach (var connected in edges)
+                    {
                         if (entities.HasComponent<Composition>(connected.m_Edge)
                             && entities.HasComponent<NetCompositionData>(entities.GetComponentData<Composition>(connected.m_Edge).m_Edge))
                             widest = math.max(widest, entities.GetComponentData<NetCompositionData>(entities.GetComponentData<Composition>(connected.m_Edge).m_Edge).m_Width);
+                        // Squared to the first road that meets here, so on a road at an angle its corners stay where the junction's are.
+                        if (turned || !entities.HasComponent<Curve>(connected.m_Edge) || !entities.HasComponent<Edge>(connected.m_Edge)) continue;
+                        var bezier = entities.GetComponentData<Curve>(connected.m_Edge).m_Bezier;
+                        float2 tangent = entities.GetComponentData<Edge>(connected.m_Edge).m_Start == node ? (bezier.b - bezier.a).xz : (bezier.d - bezier.c).xz;
+                        if (math.lengthsq(tangent) < 1e-4f) continue;
+                        along = math.normalize(tangent);
+                        turned = true;
+                    }
                     float half = widest * 0.5f + 3f;
-                    float2 at = position.xz;
-                    Junctions.Add(new Obstacle { A = at + new float2(-half, -half), B = at + new float2(half, -half), C = at + new float2(half, half), D = at + new float2(-half, half),
+                    float2 at = position.xz, x = along * half, z = new float2(-along.y, along.x) * half;
+                    Junctions.Add(new Obstacle { A = at - x - z, B = at + x - z, C = at + x + z, D = at - x + z,
                         Kind = ObstacleKind.Net, Surface = position.y, Id = Pack(node) });
                 }
         }

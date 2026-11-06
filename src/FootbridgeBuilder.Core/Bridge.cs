@@ -101,7 +101,10 @@ namespace FootbridgeBuilder.Core
 
     public sealed class BridgePlan
     {
-        /// <summary>False when nothing fits: the ghost turns red and <see cref="Messages"/> says why.</summary>
+        /// <summary>
+        /// False when nothing fits, and <see cref="Messages"/> says why. <see cref="Nodes"/> and <see cref="Pieces"/> may then hold
+        /// the bridge as it would stand with nothing in the way: for the tool to outline in red, never to build.
+        /// </summary>
         public bool Buildable;
         public Design Design;
         public string DesignName = "";

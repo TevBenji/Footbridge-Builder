@@ -1,20 +1,21 @@
 # Footbridge Builder
 
-<img align="right" src="src/FootbridgeBuilder/Properties/Thumbnail.png" alt="Footbridge Builder" width="240">
+<img align="right" src="src/FootbridgeBuilder/Properties/Thumbnail.png" alt="Footbridge Builder" width="260">
 
+<a href="https://mods.paradoxplaza.com/authors/TevBenji/cities_skylines_2"><img alt="Paradox Mods: Footbridge Builder" src="https://img.shields.io/badge/Paradox%20Mods-Footbridge%20Builder-2ea44f"></a>
 <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-1f6feb">
 <img alt="Game version" src="https://img.shields.io/badge/Cities%3A%20Skylines%20II-1.6-0e7490">
 <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0-c2410c"></a>
-<img alt="No other mods needed" src="https://img.shields.io/badge/needs-no%20other%20mods-2ea44f">
 
 A Cities: Skylines II mod that puts a working pedestrian bridge over a road in one click.
 
 Building a footbridge by hand takes three mods and a lot of fiddling, and then the cims cross at street level anyway.
-**Footbridge Builder does it for you.** Hover a road and a real preview of the bridge appears, at the lowest height the game
-allows, with ramps that fit beside the road and feet that join the sidewalk. Click, and it's built.
+**Footbridge Builder does it for you.** Hover a road and the bridge appears, as low as the game allows, with ramps that fit
+beside the road and feet that join the sidewalk. A green outline means it fits. Click, and it's built.
 
 <a href="#features">Features</a> ·
 <a href="#how-to-use">How to use</a> ·
+<a href="#settings">Settings</a> ·
 <a href="#will-cims-use-it">Will cims use it?</a> ·
 <a href="#how-it-works">How it works</a> ·
 <a href="#building-from-source">Building from source</a> ·
@@ -26,25 +27,28 @@ allows, with ramps that fit beside the road and feet that join the sidewalk. Cli
 <img src="src/FootbridgeBuilder/Properties/Screenshots/01.png" alt="Y-ramps over a six-lane road; the game's arch bridge carries the long deck" width="720">
 </p>
 
+In the game:
+
 <table>
 <tr>
-<td><img src="src/FootbridgeBuilder/Properties/Screenshots/02.png" alt="The preview, with the game's own price and the cim estimate"></td>
-<td><img src="src/FootbridgeBuilder/Properties/Screenshots/03.png" alt="Beside a junction: the crosswalk across the road is gone"></td>
+<td><img src="src/FootbridgeBuilder/Properties/Screenshots/02.png" alt="See it before you build"></td>
+<td><img src="src/FootbridgeBuilder/Properties/Screenshots/03.png" alt="Red where it won't fit"></td>
 </tr>
 <tr>
-<td><img src="src/FootbridgeBuilder/Properties/Screenshots/04.png" alt="A spiral ramp where room is short"></td>
-<td><img src="src/FootbridgeBuilder/Properties/Screenshots/05.png" alt="Over a highway"></td>
+<td><img src="src/FootbridgeBuilder/Properties/Screenshots/04.png" alt="The crosswalk goes"></td>
+<td><img src="src/FootbridgeBuilder/Properties/Screenshots/05.png" alt="A spiral where room is short"></td>
 </tr>
 </table>
 
 ## Features
 
-- **One click, no other mods.** No Anarchy, no Move It. The bridge is the game's own footpath, raised on the game's own
-  pillars, and you can bulldoze it like anything else.
-- **A real preview.** The ghost is made of the game's temporary nets, so you see the pillars, the price and anything the game
-  would refuse before you build.
+- **One click, no other mods.** No Anarchy, no Move It. The bridge is the game's own footpath on the game's own pillars,
+  and you can bulldoze it like anything else.
+- **See it before you build.** The preview is made of the game's own temporary nets, so you see the pillars, the price and
+  anything the game would refuse. A **green outline** means it fits; where nothing fits, the bridge shows in **red** with
+  the reason, so you can see its shape while you look for room.
 - **As low as the game allows.** The deck clears the road by the game's own minimum (6 m over a normal road) plus half a
-  metre, and stays level over the whole road.
+  metre, and rises a little more only where a street under it sits higher.
 - **Ramps that fit.** Y-ramps along the sidewalk, Z-ramps, switchbacks, spirals, a diagonal span or a snake deck. Auto tries
   them all, both ways, and keeps the one most cims will use. Every ramp is as steep as the path allows (cims don't mind
   climbing, only distance), and every piece passes the game's shape rules before the game sees it.
@@ -53,32 +57,84 @@ allows, with ramps that fit beside the road and feet that join the sidewalk. Cli
 - **Street crossings removed.** Marked crosswalks near the bridge lose their crosswalk, so crossing at street level costs
   cims more than the bridge.
 - **Buildings left standing.** If a ramp would hit a building, the bridge tries other shapes, then moves along the road.
-  Only when nothing fits does it work like the game's road tool, and the button says so: "Build and replace 2 buildings".
+  Only when nothing fits does it work like the game's road tool, and the button says so: **Build and replace 2 buildings**.
 - **Wide roads.** A footpath spans about 36 m. Over a wider road the game's own arch or cable-stayed pedestrian bridge
-  carries the deck, or Auto picks a spiral, whose deck is shorter.
-- **Honest numbers.** The panel shows the game's own price, the deck height, and how many cims will use the bridge.
+  carries the deck.
+
+<table>
+<tr>
+<td><img src="src/FootbridgeBuilder/Properties/Screenshots/06.png" alt="As low as the game allows"></td>
+</tr>
+</table>
 
 ## Installation
 
-Subscribe on Paradox Mods (link coming with the first release), or build it from source (below). It needs no other mods.
+Subscribe on **[Paradox Mods](https://mods.paradoxplaza.com/authors/TevBenji/cities_skylines_2)**, either on the website or in
+the game's mod browser, and restart the game. It needs no other mods.
 
 ## How to use
 
-1. **Open the tool**: the bridge button beside Zones in the toolbar, or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>.
-2. **Hover a road.** The preview follows the cursor. Near a junction it snaps to the street crossing, where cims already
-   cross.
-3. **Turn it** with <kbd>[</kbd> and <kbd>]</kbd> (up to 30 degrees) if you like.
-4. **Click** (or the green button) to build. The panel reports what was built: pieces, sidewalk joins, crossings removed
-   and the cost.
+1. Open the tool: click the **bridge** button in the bottom toolbar beside Zones, or press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>.
+2. **Hover a road.** The bridge appears and follows the cursor. Near a junction it snaps to the street crossing, where cims
+   already cross.
+3. **Read the outline.** Green: it fits. Red: nothing fits here, and the panel says what's in the way. Move along the road,
+   or turn it with <kbd>[</kbd> and <kbd>]</kbd>.
+4. **Click** (or press the green **Build** button). The panel reports what was built: pieces, sidewalk joins, crossings
+   removed and the cost.
 
-<kbd>Esc</kbd> clears the preview; press it again to close the tool.
-
-| Setting | What it does |
+| Control | Action |
 |---|---|
-| Design | Auto, or a shape of your choice |
-| Path | The footpath the bridge is built from |
-| Remove crossings | Takes the crosswalk off street crossings near the bridge (on by default) |
-| More settings | How far crossings are removed (20–150 m), extra height (0–3 m), and the turn |
+| Hover a road | Plan a bridge there |
+| Left-click | Build it, when the outline is green |
+| <kbd>[</kbd> <kbd>]</kbd> | Turn the bridge 5° at a time, up to 30° each way |
+| <kbd>Esc</kbd> | Clear the bridge; press again to close the tool |
+
+> [!IMPORTANT]
+> When no spot nearby is clear of buildings, the button says how many the bridge replaces, as the game's road tool does.
+> **Read the button before you click.**
+
+### Reading the preview
+
+| What you see | Meaning |
+|---|---|
+| Green outline | The bridge fits here: click to build it |
+| Red bridge, no preview | Nothing fits here; the panel says what's in the way |
+| Red outline round the preview | The game refuses part of it here; the panel names the game's reason |
+
+## Designs
+
+| Design | What you get |
+|---|---|
+| **Auto** (default) | Every shape below, both ways round, keeping the one most cims will use. |
+| **Y-ramps along the sidewalk** | A ramp each way along both sidewalks: the shortest walk from either direction. |
+| **Z-ramps** | One ramp on each side, running opposite ways along the road. |
+| **Switchback** | Ramps that fold back on themselves, for short stretches of road. |
+| **Spiral ramp** | A ramp that coils down beside the road where there's little room along it. |
+| **Diagonal span** | The deck crosses at a slant, so its ramps start further along the road. |
+| **Snake deck** | A deck that swings out across the road and curves down into its ramps. |
+
+## Settings
+
+The panel shows the essentials; everything else is under **More settings**.
+
+| Setting | Range | Default | What it does |
+|---|---|---|---|
+| Design | see above | Auto | The shape of the ramps. |
+| Path | the game's footpaths that can be raised | Pavement Path | The footpath the bridge is built from. Wider paths need more room. Shown when more than one is unlocked. |
+| Remove crossings | on / off | on | Takes the crosswalk off street crossings near the bridge, so cims prefer it. |
+
+<details>
+<summary><strong>More settings</strong></summary>
+
+<br>
+
+| Setting | Range | Default | What it does |
+|---|---|---|---|
+| Crossing reach | 20–150 m | 60 m | How far along the road crossings lose their crosswalk. |
+| Extra clearance | 0–3 m | 0.5 m | Height above the lowest deck the game allows. Every metre up is walking that loses cims. |
+| Turn | −30° to 30° | 0° | Turns the bridge across the road; <kbd>[</kbd> and <kbd>]</kbd> do the same. |
+
+</details>
 
 ## Will cims use it?
 
@@ -89,6 +145,16 @@ much of a hurry it's in. So the mod keeps the extra walk short (low deck, steep 
 crosswalks in reach. If a marked crosswalk still competes nearby, the panel says so.
 
 ## How it works
+
+```mermaid
+flowchart LR
+    A[Copy the road and what stands round it] --> B[Set the deck as low as the game allows]
+    B --> C[Walk each ramp down to the ground]
+    C --> D[Check every piece against what's there]
+    D --> E[Keep the shape most cims will use]
+    E --> F[Show it as the game's own preview]
+    F --> G[Build, remove crossings, check what was built]
+```
 
 The planner runs off the game's main thread and never touches the world; it gets a copy of the road, the ground, and the
 buildings, roads and water nearby. It places the deck square to the road (or turned), as low as the game's clearance rule
@@ -103,29 +169,60 @@ own height. The game draws the preview, prices it, builds it on your click, and 
 ## Known limitations
 
 - Version 1 bridges one road at a time. Junctions, roundabouts, tunnels, rail and water are planned for later.
-- Squeezed between bridges already there, a plan can still overlap them in ways only the game sees. The preview turns red,
+- Squeezed between bridges already there, a plan can still overlap them in ways only the game sees. The outline turns red,
   the panel names the game's reason, and nothing is built.
 - The game has no walkable stairs or lifts, so every design uses ramps.
 - A crosswalk removed is still an unsafe crossing in the game, so some cims will run across. No mod setting changes
   city-wide pathfinding; if you want cims to never jaywalk, a mod like Stop Jaywalking does that.
+- English only.
+
+Found a problem? [Open an issue](https://github.com/TevBenji/Footbridge-Builder/issues) with a screenshot and the log at
+`%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Logs\FootbridgeBuilder.log`.
 
 ## Building from source
 
-Needs Windows, the game's Managed DLLs, the .NET SDK and Node 18 or newer.
+<img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET%20Framework-4.8-512bd4?logo=dotnet&logoColor=white">
+<img alt="C# 9" src="https://img.shields.io/badge/C%23-9-239120">
+<img alt="Unity ECS" src="https://img.shields.io/badge/Unity-ECS-222222?logo=unity&logoColor=white">
+<img alt="React" src="https://img.shields.io/badge/React-18-087ea4?logo=react&logoColor=white">
+<img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white">
+
+**Requirements:** Windows, Cities: Skylines II, the .NET SDK 9 or later, and Node.js 18 or later. The mod targets
+.NET Framework 4.8 with C# 9 and compiles against the game's own assemblies.
 
 ```powershell
-cd src/FootbridgeBuilder.UI; npm ci; cd ../..
+git clone https://github.com/TevBenji/Footbridge-Builder.git
+cd Footbridge-Builder/src/FootbridgeBuilder.UI
+npm ci
+cd ../..
 dotnet build FootbridgeBuilder.sln -c Release
 ```
 
-The game's DLL path is set in `build/GameReferences.props`; override it with `-p:ManagedPath="<...>\Cities2_Data\Managed"`.
-Building never installs the mod.
+The build writes the mod, including the panel bundle, to `src/FootbridgeBuilder/bin/Release`. If the game is not installed
+under `D:\Steam`, point the build at it:
+`-p:ManagedPath="<Steam library>\steamapps\common\Cities Skylines II\Cities2_Data\Managed"`. Building never installs the mod.
+
+To install a build by hand, close the game and copy everything in `src/FootbridgeBuilder/bin/Release`, keeping the `images`
+folder, into `%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Mods\FootbridgeBuilder`.
+
+### Project layout
+
+| Folder | What's in it |
+|---|---|
+| `src/FootbridgeBuilder.Core` | The planner: pure C#, no game types, so it runs and is tested outside the game |
+| `src/FootbridgeBuilder` | The mod: the tool, the preview, the build and the settings |
+| `src/FootbridgeBuilder.UI` | The panel: React and TypeScript, bundled for the game's UI |
+| `tools` | The Paradox Mods publishing script |
 
 ## Credits
 
-Inspired by kianzarrin's **Automatic Pedestrian Bridge Builder** for the first Cities: Skylines. Parts of the build code are
-adapted from **Placemaker** by jackwrichards (GPL-3.0). Full credits are in [CREDITS.md](CREDITS.md).
+Footbridge Builder is made by [TevBenji](https://github.com/TevBenji). It was inspired by kianzarrin's **Automatic Pedestrian
+Bridge Builder** for the first Cities: Skylines. Parts of the build code are adapted from
+**[Placemaker](https://github.com/jackwrichards/placemaker)** by jackwrichards, which in turn credits ParkManager by tomkpunkt,
+Grid Road Generator by Ti4goc and CS2-NetworkTools by Luca Rager. The full, file-by-file account is in
+[CREDITS.md](CREDITS.md).
 
 ## Licence
 
-[GPL-3.0](LICENSE).
+Released under the [GNU General Public License v3.0](LICENSE). Cities: Skylines II is a trademark of Paradox Interactive;
+this is an independent mod, not made or endorsed by Paradox Interactive or Colossal Order.
