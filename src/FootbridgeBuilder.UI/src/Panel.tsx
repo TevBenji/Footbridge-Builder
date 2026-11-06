@@ -192,7 +192,7 @@ function FootbridgePanel() {
                         {more ? <>
                             <Stepper label="Crossing reach" value={settings.reach} minimum={20} maximum={150} step={10}
                                 format={value => `${value} m`} disabled={building || !settings.removeCrossings} trigger="setReach" />
-                            <Stepper label="Extra clearance" value={settings.extraClearance} minimum={0} maximum={3} step={0.25}
+                            <Stepper label="Extra clearance" value={settings.extraClearance} minimum={0.5} maximum={3} step={0.25}
                                 format={value => `${value.toFixed(2)} m`} disabled={building} trigger="setExtraClearance" />
                             <Stepper label="Turn" value={state.turn} minimum={-30} maximum={30} step={5}
                                 format={value => `${value}°`} disabled={building} trigger="setTurn" />

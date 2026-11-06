@@ -87,6 +87,11 @@ namespace FootbridgeBuilder.Tool
         private readonly List<Entity> upgrades = new List<Entity>();
         private string piecesReport = "";
         private bool piecesMissing;
+        // Where the last bridge was built: its report stays on the panel until the pointer moves on from there.
+        private float2? reportAt;
+        private const float ReportHold = 8f;
+        // Another tool took over before a build finished: said once the tool opens again.
+        private string interrupted = "";
 
         public ToolState State { get; } = new ToolState();
         public override string toolID => "Footbridge Builder";
@@ -166,9 +171,12 @@ namespace FootbridgeBuilder.Tool
                 State.PathLabels = paths.Select(path => path.Label).ToArray();
                 areaStale = true;
                 requestedKey = suppressedKey = "";
+                reportAt = null;
                 m_ToolSystem.activeTool = this;
                 State.Stage = ToolStage.Hovering;
                 State.Summary = paths.Count == 0 ? "No footpath that can be raised is available yet." : "";
+                State.Messages = interrupted.Length > 0 ? new[] { interrupted } : new string[0];
+                interrupted = "";
                 Touch();
             }
             catch (Exception exception) { Fail(exception, "The footbridge tool could not open."); }
@@ -193,6 +201,7 @@ namespace FootbridgeBuilder.Tool
         public void SettingsChanged()
         {
             requestedKey = suppressedKey = "";
+            reportAt = null;
             Touch();
         }
 
@@ -220,6 +229,16 @@ namespace FootbridgeBuilder.Tool
         {
             try
             {
+                // The game hands over to another tool whenever the player picks one, even mid-build: what stops here is said.
+                if (State.Stage == ToolStage.Building)
+                {
+                    interrupted = step == Step.Applied
+                        ? "Another tool was picked while the last bridge was building: it wasn't checked, and the street crossings were left as they are."
+                        : step == Step.CrossingsEmitted
+                            ? "Another tool was picked while the last bridge was building: the street crossings were left as they are."
+                            : "Another tool was picked while the last bridge was building, before its check finished.";
+                    Mod.Logger.Warn("Footbridge Builder: " + interrupted);
+                }
                 applyMode = ApplyMode.None;
                 EnableActions(false);
                 planCancel?.Cancel();
@@ -328,6 +347,12 @@ namespace FootbridgeBuilder.Tool
                 return;
             }
 
+            // The pointer is still where a bridge was just built: its report stays until it moves on.
+            if (reportAt.HasValue && !DevHovering)
+            {
+                if (math.distance(point.xz, reportAt.Value) < ReportHold) return;
+                reportAt = null;
+            }
             string key = KeyFor(edge, point);
             if (key != requestedKey && key != suppressedKey && UnityEngine.Time.realtimeSinceStartup - requestedAt > 0.12f)
                 RequestPlan(edge, point, key);
@@ -382,10 +407,17 @@ namespace FootbridgeBuilder.Tool
             requestedAt = UnityEngine.Time.realtimeSinceStartup;
             var settings = Mod.Settings;
             var path = PathCatalog.Find(paths, settings?.PathName ?? PathCatalog.DefaultName);
-            if (path == null) { State.Summary = "No footpath that can be raised is available."; Touch(); return; }
-            if (path.Locked) { State.Summary = "Footpaths aren't unlocked in this city yet."; Touch(); return; }
+            // No new plan here: the bridge from before goes too, or it would stay green and buildable under the old settings.
+            void Refuse(string reason)
+            {
+                if (plan != null || ghost.Count > 0) DropPlan();
+                State.Summary = reason;
+                Touch();
+            }
+            if (path == null) { Refuse("No footpath that can be raised is available."); return; }
+            if (path.Locked) { Refuse("Footpaths aren't unlocked in this city yet."); return; }
             var snapshot = SiteSnapshot.Capture(EntityManager, Area(point.xz, fresh: false), edge, point, path, out string problem);
-            if (snapshot == null) { State.Summary = problem; Touch(); return; }
+            if (snapshot == null) { Refuse(problem); return; }
             var request = Request(snapshot, path, point);
             planCancel?.Cancel();
             planCancel = new CancellationTokenSource();
@@ -415,7 +447,7 @@ namespace FootbridgeBuilder.Tool
                 Cursor = point.xz,
                 TurnDegrees = turn,
                 Clearance = snapshot.Clearance,
-                ExtraClearance = math.clamp(settings?.ExtraClearance ?? 0.5f, 0f, 3f),
+                ExtraClearance = math.clamp(settings?.ExtraClearance ?? 0.5f, 0.5f, 3f),
                 Design = design,
                 CrossingControl = settings == null || settings.RemoveCrossings ? CrossingControl.RemoveInReach : CrossingControl.Off,
                 CrossingReach = math.clamp(settings?.CrossingReach ?? 60, 20, 150),
@@ -709,6 +741,8 @@ namespace FootbridgeBuilder.Tool
                     ends[edge] = atStart ? (true, both.End) : (both.Start, true);
                 }
             }
+            // The upgrades are temporary road edges too: room in the terrain's road cull list first (TerrainCullGuard).
+            if (ends.Count > 0) TerrainCullGuard.Reserve(terrain, ends.Count);
             foreach (var pair in ends)
             {
                 var definition = NetDefinitions.RemoveCrosswalk(EntityManager, pair.Key, pair.Value.Start, pair.Value.End);
@@ -843,10 +877,14 @@ namespace FootbridgeBuilder.Tool
             {
                 var edge = connected.m_Edge;
                 if (!EntityManager.HasComponent<Road>(edge) || EntityManager.HasComponent<Temp>(edge) || !EntityManager.HasComponent<Curve>(edge)) continue;
-                // Our road's legs, not the side street's: the edge's middle lies on our road's line.
+                // Our road's legs, not the side street's: the edge's middle lies on our road's line, and so does its far node. A
+                // side street whose first piece is short has its middle near our line too, but never its far node.
                 float3 middle = MathUtils.Position(EntityManager.GetComponentData<Curve>(edge).m_Bezier, 0.5f);
                 if (DistanceToRoad(middle.xz) > planSnapshot.RoadWidth * 0.5f) continue;
-                ends.Add((edge, EntityManager.GetComponentData<Edge>(edge).m_Start == node));
+                var edgeEnds = EntityManager.GetComponentData<Edge>(edge);
+                Entity far = edgeEnds.m_Start == node ? edgeEnds.m_End : edgeEnds.m_Start;
+                if (!EntityManager.HasComponent<Node>(far) || DistanceToRoad(EntityManager.GetComponentData<Node>(far).m_Position.xz) > 1f) continue;
+                ends.Add((edge, edgeEnds.m_Start == node));
             }
             return (node, ends);
         }
@@ -890,8 +928,10 @@ namespace FootbridgeBuilder.Tool
 
         private void Finish(string crossings)
         {
+            // The game's own price for the ghost is what Apply charged; the money's change over the build mixes in a second of
+            // the city's income and spending, so it's only the fallback.
             long spent = moneyBefore - Money();
-            int charged = spent > 0 ? (int)spent : priced;
+            int charged = priced > 0 ? priced : spent > 0 ? (int)math.min(spent, int.MaxValue) : 0;
             LastCharged = spent;
             State.Stage = piecesMissing ? ToolStage.Failed : ToolStage.Built;
             State.Summary = piecesMissing ? "Built, with pieces missing." : "Built.";
@@ -903,6 +943,9 @@ namespace FootbridgeBuilder.Tool
             step = Step.None;
             plan = null;
             settled = false;
+            // The ghost became the bridge: nothing is left to settle, so the report isn't overwritten by a read of no ghost.
+            emittedFrame = -1;
+            reportAt = planHit.xz;
             areaStale = true;
             requestedKey = "";
             suppressedKey = "";

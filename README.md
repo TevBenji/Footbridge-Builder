@@ -131,7 +131,7 @@ The panel shows the essentials; everything else is under **More settings**.
 | Setting | Range | Default | What it does |
 |---|---|---|---|
 | Crossing reach | 20–150 m | 60 m | How far along the road crossings lose their crosswalk. |
-| Extra clearance | 0–3 m | 0.5 m | Height above the lowest deck the game allows. Every metre up is walking that loses cims. |
+| Extra clearance | 0.5–3 m | 0.5 m | Height above the lowest deck the game allows. Every metre up is walking that loses cims. |
 | Turn | −30° to 30° | 0° | Turns the bridge across the road; <kbd>[</kbd> and <kbd>]</kbd> do the same. |
 
 </details>

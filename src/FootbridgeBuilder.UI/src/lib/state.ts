@@ -13,7 +13,7 @@ export interface Settings {
     removeCrossings: boolean;
     /** 20-150 m along the road. */
     reach: number;
-    /** 0-3 m above the lowest deck the game allows. */
+    /** 0.5-3 m over the road's and deck's own heights: the game refused decks much lower. */
     extraClearance: number;
 }
 
@@ -85,7 +85,7 @@ export function readState(raw: unknown): ToolState {
             path: text(settings.path),
             removeCrossings: flag(settings.removeCrossings, true),
             reach: whole(settings.reach, 60, 20, 150),
-            extraClearance: number(settings.extraClearance, 0.5, 0, 3),
+            extraClearance: number(settings.extraClearance, 0.5, 0.5, 3),
         },
     };
 }
