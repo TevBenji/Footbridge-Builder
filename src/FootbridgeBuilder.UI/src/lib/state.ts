@@ -33,6 +33,8 @@ export interface ToolState {
     cost: number;
     crossingsRemoved: number;
     competingMarked: boolean;
+    /** How far along the road the competing crossing is, in metres. */
+    competingDistance: number;
     buildingsReplaced: number;
     refused: number;
     turn: number;
@@ -73,6 +75,7 @@ export function readState(raw: unknown): ToolState {
         cost: whole(state.cost, -1, -1, 2147483647),
         crossingsRemoved: whole(state.crossingsRemoved, 0, 0, 1000),
         competingMarked: flag(state.competingMarked, false),
+        competingDistance: whole(state.competingDistance, 0, 0, 10000),
         buildingsReplaced: whole(state.buildingsReplaced, 0, 0, 10000),
         refused: whole(state.refused, 0, 0, 10000),
         turn: number(state.turn, 0, -30, 30),

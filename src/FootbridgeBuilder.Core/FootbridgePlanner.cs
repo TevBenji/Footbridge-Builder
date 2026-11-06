@@ -163,6 +163,7 @@ namespace FootbridgeBuilder.Core
             // Each outline with the circle around it: most outlines near a point are rejected by the circle alone.
             private readonly SpatialBuckets<(Obstacle Outline, float2 Centre, float Radius)> obstacles = new SpatialBuckets<(Obstacle, float2, float)>(16f);
             private readonly float half, grade, minRadius, bendRadius, kerb, landing, spurRadius, minPiece, clearance, highest;
+            private readonly float2 pathRange;
             // Along-the-road walks for the side being planned: Both, Forward and Backward share them.
             private readonly Dictionary<float, (Walk Walk, string Problem, HashSet<long> Buildings)> alongWalks = new Dictionary<float, (Walk, string, HashSet<long>)>();
 
@@ -184,6 +185,7 @@ namespace FootbridgeBuilder.Core
                 spurRadius = math.max(bendRadius, (minPiece + 0.5f) * 3f / math.PI);
                 landing = kerb + spurRadius * 0.5f;
                 highest = math.max(1f, path.MaxElevation);
+                pathRange = path.HeightRange;
                 clearance = math.max(0f, request.Clearance) + math.max(0f, request.ExtraClearance);
                 // Padded by the widest query, as SpatialBuckets expects.
                 const float pad = 6f;
@@ -284,7 +286,7 @@ namespace FootbridgeBuilder.Core
                 float2 landingA = Road.Offset(station - landing * tan, -landing), landingB = Road.Offset(station + landing * tan, landing);
                 // A junction or street under the deck that sits a little higher than the road (on a slope): the deck rises to
                 // clear it. Anything much higher (an elevated road) is left for the obstacle check to refuse.
-                float under = NetTop(landingA, landingB) + clearance;
+                float under = DeckNeed(landingA, landingB) + math.max(0f, Request.ExtraClearance);
                 if (under > deckY && under <= deckY + MostRise) deckY = under + 0.05f;
                 Side a = null, b = null;
                 for (int attempt = 0; attempt < 3; attempt++)
@@ -355,6 +357,9 @@ namespace FootbridgeBuilder.Core
                 float height = deckY - Request.Ground(side.Landing);
                 if (height < 1f) { side.Problem = "the ground is as high as the deck"; return side; }
                 if (height > highest && !ignoreObstacles) { side.Problem = "the deck would be higher than the path can be raised"; return side; }
+                // The pillar under the landing, whatever shape the ramps take from it.
+                string pillar = PillarProblem(side.Landing, deckY);
+                if (pillar.Length > 0) { side.Problem = pillar; return side; }
 
                 float2 along = Road.Tangent(landingStation);
                 float legGrade = grade;
@@ -491,6 +496,31 @@ namespace FootbridgeBuilder.Core
                     string problem = CheckWalk(walk, piece, buildings);
                     if (problem.Length > 0) return problem;
                 }
+                // The game stands a pillar under every raised node: none may land on another net.
+                for (int node = 1; node + 1 < walk.Distances.Count; node++)
+                {
+                    float2 point = walk.Route.Position(walk.Distances[node]);
+                    if (walk.Heights[node] - Request.Ground(point) <= ElevatedFrom) continue;
+                    string problem = PillarProblem(point, walk.Heights[node]);
+                    if (problem.Length > 0) return problem;
+                }
+                return "";
+            }
+
+            private string PillarProblem(float2 point, float height)
+            {
+                if (ignoreObstacles) return "";
+                float reach = half + 0.2f;
+                foreach (var (obstacle, centre, radius) in obstacles.Near(point))
+                {
+                    // Only a net below the node: a pillar reaches from the ground up to it.
+                    if (obstacle.Kind != ObstacleKind.Net || obstacle.Surface >= height - 0.5f) continue;
+                    float far = reach + radius;
+                    if (math.distancesq(point, centre) > far * far || DistanceToQuad(point, obstacle) > reach) continue;
+                    if (Blockers != null && Blockers.Count < 12)
+                        Blockers.Add($"{obstacle.Kind} {obstacle.Id} (surface {obstacle.Surface:F1}) at ({point.x:F1}, {point.y:F1}), node at {height:F1}: a pillar would stand on it");
+                    return "a pillar would stand on another road or path";
+                }
                 return "";
             }
 
@@ -610,8 +640,7 @@ namespace FootbridgeBuilder.Core
                         case ObstacleKind.Building: buildings.Add(obstacle.Id); break;
                         case ObstacleKind.FixedBuilding: return "a service building is in the way";
                         case ObstacleKind.Water: if (above < 1.5f) return "water is in the way"; break;
-                        // The game's own rule for one net over another, as over the bridged road.
-                        case ObstacleKind.Net: if (height - obstacle.Surface < Request.Clearance) return "another road or path is in the way"; break;
+                        case ObstacleKind.Net: if (!ClearOf(obstacle, height)) return "another road or path is in the way"; break;
                         // Ramps run a kerb gap off the road's edge by design, so only a real overlap counts.
                         case ObstacleKind.HostRoad: if (!deck && distance < half - 0.05f) return "the ramp would hang over the road"; break;
                     }
@@ -641,8 +670,23 @@ namespace FootbridgeBuilder.Core
                 return shortfall;
             }
 
-            /// <summary>The highest net surface the deck's line passes over (the bridged road aside), or far below when none.</summary>
-            private float NetTop(float2 from, float2 to)
+            /// <summary>
+            /// The game's rule for one net over another: the upper one's underside at or above the lower one's top. A piece at
+            /// <paramref name="height"/> clears the net by passing over it or, where the net is raised, under it.
+            /// </summary>
+            private bool ClearOf(Obstacle net, float height)
+            {
+                if (height - net.Surface >= NeedOver(net)) return true;
+                // Under a sloping net, its low end is what counts.
+                float low = float.IsNaN(net.Lowest) ? net.Surface : math.min(net.Surface, net.Lowest);
+                return !float.IsNaN(net.Below) && height + pathRange.y <= low + net.Below;
+            }
+
+            // How far above a net's surface a piece must be to pass over it. A net with no height range is taken as a road.
+            private float NeedOver(Obstacle net) => float.IsNaN(net.Above) ? Request.Clearance : net.Above - pathRange.x;
+
+            /// <summary>The height the deck's line needs to pass over every net under it (the bridged road aside); far below when none.</summary>
+            private float DeckNeed(float2 from, float2 to)
             {
                 float top = float.MinValue, reach = half + 0.2f;
                 int steps = math.max(1, (int)math.ceil(math.distance(from, to)));
@@ -654,7 +698,7 @@ namespace FootbridgeBuilder.Core
                         if (obstacle.Kind != ObstacleKind.Net) continue;
                         float far = reach + radius;
                         if (math.distancesq(point, centre) > far * far || DistanceToQuad(point, obstacle) > reach) continue;
-                        top = math.max(top, obstacle.Surface);
+                        top = math.max(top, obstacle.Surface + NeedOver(obstacle));
                     }
                 }
                 return top;
@@ -739,6 +783,9 @@ namespace FootbridgeBuilder.Core
                 plan.UseLabel = CimEstimate.Label(candidate.Use.Share);
                 plan.CompetingCrossing = candidate.Use.Competing;
                 plan.CompetingMarked = candidate.Use.CompetingMarked;
+                foreach (var crossing in Request.Crossings ?? Array.Empty<Crossing>())
+                    if (crossing.Id == candidate.Use.Competing)
+                        plan.CompetingDistance = math.abs(Road.Nearest(crossing.Position) - candidate.Station);
                 plan.BuildingsToReplace.AddRange(Sorted(candidate.Buildings));
                 if (Request.CrossingControl == CrossingControl.RemoveInReach)
                     foreach (var crossing in Request.Crossings ?? Array.Empty<Crossing>())
