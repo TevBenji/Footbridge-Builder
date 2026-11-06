@@ -36,7 +36,7 @@ Built for game version **1.6.***.
 
 ### Credits
 
-Inspired by kianzarrin's Automatic Pedestrian Bridge Builder for the first game. Parts of the build code are adapted from **Placemaker** by jackwrichards (GPL-3.0), which in turn credits ParkManager and Grid Road Generator. Footbridge Builder is GPL-3.0 too; the full source is on GitHub (link on this page).
+Inspired by kianzarrin's Automatic Pedestrian Bridge Builder for the first game. The tool, panel and build steps started from **Stepped Streets**, my mod for hillside neighbourhoods. Parts of the build code are adapted from **Placemaker** by jackwrichards (GPL-3.0), which in turn credits ParkManager and Grid Road Generator. Footbridge Builder is GPL-3.0 too; the full source is on GitHub (link on this page).
 	</LongDescription>
 	<!--A missing picture is silently replaced by a default one-->
 	<Thumbnail Value="Properties/Thumbnail.png" />

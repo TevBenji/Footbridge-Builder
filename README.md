@@ -217,7 +217,9 @@ folder, into `%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\M
 ## Credits
 
 Footbridge Builder is made by [TevBenji](https://github.com/TevBenji). It was inspired by kianzarrin's **Automatic Pedestrian
-Bridge Builder** for the first Cities: Skylines. Parts of the build code are adapted from
+Bridge Builder** for the first Cities: Skylines. The tool, panel and build steps started from
+**[Stepped Streets](https://github.com/TevBenji/Stepped-Streets)**, the same author's mod for hillside neighbourhoods. Parts of
+the build code are adapted from
 **[Placemaker](https://github.com/jackwrichards/placemaker)** by jackwrichards, which in turn credits ParkManager by tomkpunkt,
 Grid Road Generator by Ti4goc and CS2-NetworkTools by Luca Rager. The full, file-by-file account is in
 [CREDITS.md](CREDITS.md).
