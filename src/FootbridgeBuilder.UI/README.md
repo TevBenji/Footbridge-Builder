@@ -28,8 +28,29 @@ Group: `FootbridgeBuilder`. Value: `state`, a `ValueBinding<string>` carrying JS
 | `summary` | string | The tool's result in plain words |
 | `messages` | string[] | Things the player should know |
 | `progress` | number | 0 to 1 while building |
+| `buildable` | boolean | A bridge fits here |
+| `designName` | string | The shape on show, such as `Y-ramps` |
+| `deckHeight` | number | Metres above the road |
+| `useLabel`, `useShare`, `extraWalk` | string, number 0-1, number | The cim estimate: Most, About half or Few; the share; the extra walk in metres (negative is shorter) |
+| `cost` | number | The game's own price for the ghost; -1 until it has priced it |
+| `crossingsRemoved` | number | Marked crosswalks that lose their crosswalk on build |
+| `competingMarked` | boolean | A marked crosswalk in reach still competes |
+| `buildingsReplaced` | number | Zoned buildings the game will replace (its own warnings on the ghost) |
+| `refused` | number | Temporaries the game marks with an error |
+| `turn` | number | Degrees, -30 to 30 |
+| `paths` | `{name, label}[]` | Footpaths that can be raised |
+| `settings` | object | `design`, `path`, `removeCrossings`, `reach` (20-150), `extraClearance` (0-3) |
 
 | Trigger | Argument | Does |
 |---|---|---|
 | `toggleTool` | none | Opens or closes the tool |
 | `close` | none | Closes the tool |
+| `build` | none | Builds the bridge on show |
+| `setDesign` | string | `Auto`, `YRamps`, `ZRamps`, `Switchback`, `SpiralRamp`, `DiagonalSpan` or `SnakeDeck` |
+| `setPath` | string | A path's prefab name from `paths` |
+| `setRemoveCrossings` | boolean | Remove crossings in reach |
+| `setReach` | number | Clamped to 20-150 m, saved |
+| `setExtraClearance` | number | Clamped to 0-3 m in 0.25 steps, saved |
+| `setTurn` | number | Clamped to -30..30 in 5 degree steps, not saved |
+
+Numeric triggers clamp in C#, save with `ApplyAndSave()` and then tell the tool, which plans again.

@@ -27,8 +27,20 @@ namespace FootbridgeBuilder.Settings
         [SettingsUISection(Section, Group)]
         public ProxyBinding ToggleToolBinding { get; set; }
 
+        // Set from the panel, so they stay off the Options page.
+        [SettingsUIHidden] public string Design { get; set; }
+        [SettingsUIHidden] public string PathName { get; set; }
+        [SettingsUIHidden] public bool RemoveCrossings { get; set; }
+        [SettingsUIHidden] public int CrossingReach { get; set; }
+        [SettingsUIHidden] public float ExtraClearance { get; set; }
+
         public override void SetDefaults()
         {
+            Design = "Auto";
+            PathName = "Pavement Path";
+            RemoveCrossings = true;
+            CrossingReach = 60;
+            ExtraClearance = 0.5f;
         }
 
         /// <summary>

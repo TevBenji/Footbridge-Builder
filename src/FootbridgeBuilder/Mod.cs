@@ -30,7 +30,6 @@ namespace FootbridgeBuilder
                 Settings.RegisterKeyBindings();
                 GameManager.instance.localizationManager.AddSource("en-US", Settings.Labels());
             });
-            Register("build tool", () => updateSystem.UpdateAt<Build.BuildToolSystem>(SystemUpdatePhase.ToolUpdate));
             Register("tool", () => updateSystem.UpdateAt<FootbridgeToolSystem>(SystemUpdatePhase.ToolUpdate));
             Register("tool hotkey", () => updateSystem.UpdateAt<FootbridgeHotkeySystem>(SystemUpdatePhase.ToolUpdate));
             Register("panel bindings", () => updateSystem.UpdateAt<Panel.PanelSystem>(SystemUpdatePhase.UIUpdate));

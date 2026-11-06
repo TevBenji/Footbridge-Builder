@@ -29,12 +29,14 @@ namespace FootbridgeBuilder.Core
         public string Name = "Pavement Path";
         public float Width = 3f;
         /// <summary>The steepest the game lets this path climb, as rise over run.</summary>
-        public float MaxSlope = 0.25f;
+        public float MaxSlope = 0.20f;
         /// <summary>How far the game cuts a piece back from a node it shares.</summary>
-        public float NodeOffset = 0.5f;
+        public float NodeOffset = 0f;
         public float MaxEdgeLength = 200f;
         /// <summary>The highest a node may be raised above the ground.</summary>
-        public float MaxElevation = 30f;
+        public float MaxElevation = 20f;
+        /// <summary>The longest deck the game lets span unsupported (the path's own, or a pedestrian bridge's when one is available).</summary>
+        public float MaxSpan = 1000f;
     }
 
     /// <summary>Something on the ground the bridge must respect, as a four-cornered outline.</summary>
@@ -67,7 +69,7 @@ namespace FootbridgeBuilder.Core
         public float2 Cursor;
         public float TurnDegrees;
         /// <summary>The lowest deck the game accepts over this road, measured from the road surface.</summary>
-        public float Clearance = 5.5f;
+        public float Clearance = 6f;
         public float ExtraClearance = 0.5f;
         public Design Design = Design.Auto;
         public CrossingControl CrossingControl = CrossingControl.RemoveInReach;
@@ -120,6 +122,8 @@ namespace FootbridgeBuilder.Core
         public bool CompetingMarked;
         public readonly List<long> BuildingsToReplace = new List<long>();
         public readonly List<string> Messages = new List<string>();
+        /// <summary>For the log, not the player: what stopped each side when nothing fits (obstacle kind, id, heights).</summary>
+        public readonly List<string> Blockers = new List<string>();
 
         public float3 Position(int node) => Nodes[node].Position;
     }

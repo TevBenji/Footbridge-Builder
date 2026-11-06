@@ -25,11 +25,11 @@ namespace FootbridgeBuilder.Core
         /// <summary>How far a ramp's round end stays off the road's edge, so the game joins it to the sidewalk instead of cutting the road.</summary>
         public const float KerbGap = 0.25f;
         public const float RaisedPieceLength = 12f;
+        // Half a metre under the limit: a curved piece's cubic runs a little longer than the walking line it follows.
+        private const float WalkStep = 11.5f;
         public const float ElevatedFrom = 0.75f;
         /// <summary>The game joins a path's dead end to a sidewalk this far past the road's edge (plus the path's half width).</summary>
         public const float JoinReach = 4f;
-        /// <summary>A ramp passing over another road or path stays this far above it.</summary>
-        private const float NetHeadroom = 4.5f;
         private const float SnapReach = 30f;
         private const float GentleGrade = 1f / 12f;
         private const float SnakeBend = 18f;
@@ -93,11 +93,12 @@ namespace FootbridgeBuilder.Core
 
             Candidate fallback = null;
             string reasonA = "", reasonB = "";
+            context.Blockers = plan.Blockers;
             foreach (float shift in Shifts)
             {
                 cancel.ThrowIfCancellationRequested();
                 float at = station + shift;
-                if (at < 1f || at > context.Road.Length - 1f) continue;
+                if (at < 1f || at > context.Road.Length - 1f || context.OverANode(at)) continue;
                 Candidate best = null;
                 foreach (var deck in context.DeckOptions())
                 {
@@ -140,6 +141,7 @@ namespace FootbridgeBuilder.Core
         {
             public readonly BridgeRequest Request;
             public readonly RoadLine Road;
+            public List<string> Blockers;
             // Each outline with the circle around it: most outlines near a point are rejected by the circle alone.
             private readonly SpatialBuckets<(Obstacle Outline, float2 Centre, float Radius)> obstacles = new SpatialBuckets<(Obstacle, float2, float)>(16f);
             private readonly float half, grade, minRadius, bendRadius, kerb, landing, spurRadius, minPiece, clearance, highest;
@@ -177,6 +179,21 @@ namespace FootbridgeBuilder.Core
                         math.max(math.distancesq(centre, obstacle.C), math.distancesq(centre, obstacle.D))));
                     obstacles.Add(low, high, (obstacle, centre, radius));
                 }
+            }
+
+            /// <summary>
+            /// Too close to a crossing's node for the deck. Over a road node the game splits the deck at the road's edge and puts
+            /// pillars there, which it then refuses (seen on a large road in the test city), so the deck keeps to one side.
+            /// </summary>
+            public bool OverANode(float station)
+            {
+                foreach (var crossing in Request.Crossings ?? Array.Empty<Crossing>())
+                {
+                    float at = Road.Nearest(crossing.Position);
+                    if (math.distance(Road.Point(at).xz, crossing.Position) > Request.RoadWidth * 0.5f + 4f) continue;
+                    if (math.abs(station - at) < crossing.ClearDistance - 0.01f) return true;
+                }
+                return false;
             }
 
             /// <summary>C2: a cursor near a street crossing snaps to it, so the bridge replaces the crossing cims already use.</summary>
@@ -262,6 +279,12 @@ namespace FootbridgeBuilder.Core
                     deckY += shortfall + 0.05f;
                 }
 
+                // Half a metre under the limit: a 40.0 m deck over a 32 m road was refused by a game whose limit is 40 m.
+                if (math.distance(a.Landing, b.Landing) > (Request.Path ?? new PathSpec()).MaxSpan - 0.5f)
+                {
+                    whyA = whyB = "the road is too wide for one span of this path";
+                    return null;
+                }
                 var candidate = new Candidate { Deck = deck, A = a, B = b, Station = station, DeckY = deckY, Shift = shift };
                 string deckProblem = CheckLine(a.Landing, deckY, b.Landing, deckY, deck: true, candidate.Buildings);
                 if (deckProblem.Length > 0) { whyA = whyB = deckProblem; return null; }
@@ -350,9 +373,10 @@ namespace FootbridgeBuilder.Core
                         // Three quarters of a turn away from the road, then straight back at it, so the foot faces the
                         // sidewalk beside the landing. The grade spreads the climb over the whole of that.
                         const float turns = 1.5f * math.PI;
-                        float radius = math.max(bendRadius, height / (grade * (turns + 1f)));
+                        float radius = math.max(bendRadius, (height / grade + 0.6f + minPiece) / (turns + 1f));
                         if (radius > LongestSpiralRadius) { side.Problem = "a spiral would be too big"; return side; }
-                        legGrade = height / ((turns + 1f) * radius - 0.3f);
+                        // It lands a short piece before the kerb, so the foot ends on the ground facing the sidewalk.
+                        legGrade = height / ((turns + 1f) * radius - 0.6f - minPiece);
                         float2 heading = along * direction;
                         routes.Add(Route.From(side.Landing).Arc(heading, radius, turns * sign * direction).Straight(-Geometry.Left(along) * sign, radius));
                         break;
@@ -406,7 +430,16 @@ namespace FootbridgeBuilder.Core
                 float2 heading = walk.Route.Heading(math.max(0f, footDistance - 0.25f));
                 float2 toRoad = math.normalizesafe(Road.Point(Road.Nearest(foot)).xz - foot);
                 float facing = math.acos(math.clamp(math.dot(heading, toRoad), -1f, 1f));
-                if (facing > math.radians(40f))
+                float room = walk.Route.Length - 0.3f - footDistance;
+                if (facing <= math.radians(40f) && room >= minPiece)
+                {
+                    // Already facing the road with room before the kerb: a short piece on the ground, straight on.
+                    walk.Distances.Add(footDistance + room);
+                    walk.Heights.Add(Request.Ground(walk.Route.Position(footDistance + room)));
+                    walk.Length3D += room;
+                    foot = walk.Route.Position(footDistance + room);
+                }
+                else if (facing > math.radians(40f))
                 {
                     float turn = facing - math.radians(30f);
                     if (turn > math.PI * 0.5f) return "the ramp's foot can't turn to face the sidewalk";
@@ -460,7 +493,7 @@ namespace FootbridgeBuilder.Core
                             walk.Distances.RemoveAt(walk.Distances.Count - 1);
                             walk.Heights.RemoveAt(walk.Heights.Count - 1);
                             float previous = walk.Distances[walk.Distances.Count - 1];
-                            if (foot - previous > RaisedPieceLength)
+                            if (foot - previous > WalkStep)
                             {
                                 float middle = (previous + foot) * 0.5f;
                                 walk.Distances.Add(middle);
@@ -487,7 +520,7 @@ namespace FootbridgeBuilder.Core
             // The next node: 12 m on, sooner where the route turns more than 60°.
             private float NextStop(Route route, float at)
             {
-                float end = math.min(route.Length, at + RaisedPieceLength);
+                float end = math.min(route.Length, at + WalkStep);
                 float2 heading = route.Heading(at);
                 for (float probe = at + 0.5f; probe < end; probe += 0.5f)
                     if (math.acos(math.clamp(math.dot(heading, route.Heading(probe)), -1f, 1f)) > MostTurnPerPiece)
@@ -523,6 +556,15 @@ namespace FootbridgeBuilder.Core
 
             private string CheckPoint(float2 point, float height, bool deck, HashSet<long> buildings)
             {
+                string problem = Blocked(point, height, deck, buildings, out var blocker);
+                if (problem.Length > 0 && blocker != null && Blockers != null && Blockers.Count < 12)
+                    Blockers.Add($"{blocker.Kind} {blocker.Id} (surface {blocker.Surface:F1}) at ({point.x:F1}, {point.y:F1}), path at {height:F1}: {problem}");
+                return problem;
+            }
+
+            private string Blocked(float2 point, float height, bool deck, HashSet<long> buildings, out Obstacle blocker)
+            {
+                blocker = null;
                 float reach = half + 0.2f;
                 float above = height - Request.Ground(point);
                 foreach (var (obstacle, centre, radius) in obstacles.Near(point))
@@ -531,12 +573,14 @@ namespace FootbridgeBuilder.Core
                     if (math.distancesq(point, centre) > far * far) continue;
                     float distance = DistanceToQuad(point, obstacle);
                     if (distance > reach) continue;
+                    blocker = obstacle;
                     switch (obstacle.Kind)
                     {
                         case ObstacleKind.Building: buildings.Add(obstacle.Id); break;
                         case ObstacleKind.FixedBuilding: return "a service building is in the way";
                         case ObstacleKind.Water: if (above < 1.5f) return "water is in the way"; break;
-                        case ObstacleKind.Net: if (height - obstacle.Surface < NetHeadroom) return "another road or path is in the way"; break;
+                        // The game's own rule for one net over another, as over the bridged road.
+                        case ObstacleKind.Net: if (height - obstacle.Surface < Request.Clearance) return "another road or path is in the way"; break;
                         // Ramps run a kerb gap off the road's edge by design, so only a real overlap counts.
                         case ObstacleKind.HostRoad: if (!deck && distance < half - 0.05f) return "the ramp would hang over the road"; break;
                     }

@@ -17,6 +17,28 @@ namespace FootbridgeBuilder.Tool
         /// <summary>Build progress, 0 to 1, while building.</summary>
         public float Progress;
 
+        // The bridge on show.
+        public bool Buildable;
+        public string DesignName = "";
+        public float DeckHeight;
+        public string UseLabel = "";
+        public float UseShare;
+        public float ExtraWalk;
+        /// <summary>What the game will charge, read from its own pricing of the ghost; -1 until it has priced it.</summary>
+        public int Cost = -1;
+        public int CrossingsRemoved;
+        /// <summary>A marked crosswalk still competes after the build.</summary>
+        public bool CompetingMarked;
+        /// <summary>The zoned buildings the game will replace, counted from its own warnings on the ghost.</summary>
+        public int BuildingsReplaced;
+        /// <summary>Pieces the game itself refuses (its red errors on the ghost).</summary>
+        public int Refused;
+        public float Turn;
+
+        // The paths to choose from.
+        public string[] PathNames = new string[0];
+        public string[] PathLabels = new string[0];
+
         public int Version;
     }
 }
