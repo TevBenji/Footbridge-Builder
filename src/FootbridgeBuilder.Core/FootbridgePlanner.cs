@@ -300,13 +300,19 @@ namespace FootbridgeBuilder.Core
                 if (!PickSides(deck.SideA, deck.SideB, station, tan, landingA, landingB, ref deckY, out var a, out var b, out whyA, out whyB))
                 {
                     // Each side picks its own ramp, and a switchback lands further out than the others: a deck too long
-                    // with one may still fit with the plain ramps.
+                    // with one may still fit with plain ramps, on one side (the other may need its switchback) or both.
+                    if (whyA != TooWide) return null;
                     var plainA = Array.FindAll(deck.SideA, leg => !Switchback(leg));
                     var plainB = Array.FindAll(deck.SideB, leg => !Switchback(leg));
-                    if (whyA != TooWide || plainA.Length == 0 || plainB.Length == 0
-                        || (plainA.Length == deck.SideA.Length && plainB.Length == deck.SideB.Length)) return null;
-                    deckY = startY;
-                    if (!PickSides(plainA, plainB, station, tan, landingA, landingB, ref deckY, out a, out b, out whyA, out whyB)) return null;
+                    bool fitted = false;
+                    foreach (var (stylesA, stylesB) in new[] { (plainA, deck.SideB), (deck.SideA, plainB), (plainA, plainB) })
+                    {
+                        if (stylesA.Length == 0 || stylesB.Length == 0 || (stylesA.Length == deck.SideA.Length && stylesB.Length == deck.SideB.Length)) continue;
+                        deckY = startY;
+                        if (PickSides(stylesA, stylesB, station, tan, landingA, landingB, ref deckY, out a, out b, out whyA, out whyB)) { fitted = true; break; }
+                    }
+                    // The span is what stopped it: say so, not why the fallbacks didn't fit either.
+                    if (!fitted) { whyA = whyB = TooWide; return null; }
                 }
                 var candidate = new Candidate { Deck = deck, A = a, B = b, Station = station, DeckY = deckY, Shift = shift };
                 string deckProblem = CheckLine(a.Landing, deckY, b.Landing, deckY, deck: true, candidate.Buildings);

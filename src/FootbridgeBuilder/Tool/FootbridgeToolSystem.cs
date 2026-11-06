@@ -90,8 +90,11 @@ namespace FootbridgeBuilder.Tool
         // Where the last bridge was built: its report stays on the panel until the pointer moves on from there.
         private float2? reportAt;
         private const float ReportHold = 8f;
-        // Another tool took over before a build finished: said once the tool opens again.
+        // Another tool took over before a build finished: said above every plan until the next build starts.
         private string interrupted = "";
+
+        private string[] WithNotice(IEnumerable<string> messages) =>
+            (interrupted.Length > 0 ? new[] { interrupted }.Concat(messages) : messages).ToArray();
 
         public ToolState State { get; } = new ToolState();
         public override string toolID => "Footbridge Builder";
@@ -175,8 +178,7 @@ namespace FootbridgeBuilder.Tool
                 m_ToolSystem.activeTool = this;
                 State.Stage = ToolStage.Hovering;
                 State.Summary = paths.Count == 0 ? "No footpath that can be raised is available yet." : "";
-                State.Messages = interrupted.Length > 0 ? new[] { interrupted } : new string[0];
-                interrupted = "";
+                State.Messages = WithNotice(Array.Empty<string>());
                 Touch();
             }
             catch (Exception exception) { Fail(exception, "The footbridge tool could not open."); }
@@ -487,7 +489,7 @@ namespace FootbridgeBuilder.Tool
             State.Cost = -1;
             State.Refused = State.BuildingsReplaced = 0;
             State.Summary = plan.Buildable ? plan.DesignName : "No bridge fits here.";
-            State.Messages = plan.Messages.ToArray();
+            State.Messages = WithNotice(plan.Messages);
             State.Progress = 0f;
             Touch();
             // The old ghost goes in one frame and the new one comes in the next.
@@ -521,7 +523,7 @@ namespace FootbridgeBuilder.Tool
             State.Buildable = false;
             State.DesignName = "";
             State.Summary = "";
-            State.Messages = new string[0];
+            State.Messages = WithNotice(Array.Empty<string>());
             Touch();
         }
 
@@ -646,7 +648,7 @@ namespace FootbridgeBuilder.Tool
             RefusedBecause = State.Refused > 0 ? ErrorNames() : "";
             if (State.Refused > 0)
                 messages.Insert(0, "The game refuses part of this bridge here (shown red)" + (RefusedBecause.Length > 0 ? ": " + RefusedBecause + "." : "."));
-            State.Messages = messages.ToArray();
+            State.Messages = WithNotice(messages);
             GhostVersion++;
             Touch();
         }
@@ -682,6 +684,8 @@ namespace FootbridgeBuilder.Tool
                 Message("Something changed here. Check the new bridge and click again.");
                 return;
             }
+            // A new build's own report replaces the note about the one before.
+            interrupted = "";
             moneyBefore = Money();
             priced = math.max(0, State.Cost);
             applyMode = ApplyMode.Apply;
