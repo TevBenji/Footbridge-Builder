@@ -5,16 +5,33 @@
 	<ShortDescription Value="Hover a road and click: a working pedestrian bridge appears, at the right height, joined to the sidewalks." />
 	<!--Every upload sends exactly this page: change it here, not on the website, or the next upload overwrites the website-->
 	<LongDescription>
-Hover a road and click. Footbridge Builder puts a working pedestrian bridge over it: the right height, ramps that fit, joined to the sidewalks. No other mods needed.
+Hover a road and click. Footbridge Builder puts a working pedestrian bridge over it: as low as the game allows, with ramps that fit beside the road and feet that join the sidewalk. No other mods needed.
+
+### Features
+* **A real preview.** The ghost is made of the game's own temporary nets: you see the pillars, the price and anything the game would refuse before you build.
+* **Ramps that fit.** Y-ramps, Z-ramps, switchbacks, spirals, a diagonal span or a snake deck. Auto tries them all and keeps the one most cims will use.
+* **Feet that join the sidewalk**, without cutting the road or painting a new crossing.
+* **Street crossings removed.** Marked crosswalks near the bridge lose their crosswalk, so cims prefer the bridge.
+* **Buildings left standing** where any shape fits; otherwise the button says how many will be replaced, as the game's road tool does.
+* **Wide roads** get the game's own arch or cable-stayed pedestrian bridge as the deck.
+* **Honest numbers:** the game's own price, the deck height, and how many cims will use the bridge, worked out from the game's pathfinding.
+
+### How to use
+Open the tool with the bridge button beside Zones or **Ctrl+Shift+F**. Hover a road; turn the bridge with **[** and **]**; click to build. **Esc** clears the preview, and again closes the tool.
 
 Built for game version **1.6.***.
 
 ### Credits
-
-Parts of the build code are adapted from **Placemaker** by jackwrichards (GPL-3.0), which in turn credits ParkManager and Grid Road Generator. Inspired by kianzarrin's Automatic Pedestrian Bridge Builder for the first game. Footbridge Builder is GPL-3.0 too; the full source is on GitHub (link on this page).
+Inspired by kianzarrin's Automatic Pedestrian Bridge Builder for the first game. Parts of the build code are adapted from **Placemaker** by jackwrichards (GPL-3.0), which in turn credits ParkManager and Grid Road Generator. Footbridge Builder is GPL-3.0 too; the full source is on GitHub (link on this page).
 	</LongDescription>
 	<!--A missing picture is silently replaced by a default one-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
+	<!--Up to 10, each under 2.1 MB-->
+	<Screenshot Value="Properties/Screenshots/01.png" />
+	<Screenshot Value="Properties/Screenshots/02.png" />
+	<Screenshot Value="Properties/Screenshots/03.png" />
+	<Screenshot Value="Properties/Screenshots/04.png" />
+	<Screenshot Value="Properties/Screenshots/05.png" />
 	<Tag Value="Code Mod" />
 	<ModVersion Value="0.1.0" />
 	<GameVersion Value="1.6.*" />

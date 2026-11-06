@@ -23,13 +23,17 @@ allows, with ramps that fit beside the road and feet that join the sidewalk. Cli
 <br clear="right">
 
 <p align="center">
-<img src="src/FootbridgeBuilder/Properties/Screenshots/01.png" alt="Y-ramps over a road, built in one click" width="720">
+<img src="src/FootbridgeBuilder/Properties/Screenshots/01.png" alt="Y-ramps over a six-lane road; the game's arch bridge carries the long deck" width="720">
 </p>
 
 <table>
 <tr>
-<td><img src="src/FootbridgeBuilder/Properties/Screenshots/02.png" alt="The preview, with the game's own price"></td>
-<td><img src="src/FootbridgeBuilder/Properties/Screenshots/03.png" alt="Over a highway"></td>
+<td><img src="src/FootbridgeBuilder/Properties/Screenshots/02.png" alt="The preview, with the game's own price and the cim estimate"></td>
+<td><img src="src/FootbridgeBuilder/Properties/Screenshots/03.png" alt="Beside a junction: the crosswalk across the road is gone"></td>
+</tr>
+<tr>
+<td><img src="src/FootbridgeBuilder/Properties/Screenshots/04.png" alt="A spiral ramp where room is short"></td>
+<td><img src="src/FootbridgeBuilder/Properties/Screenshots/05.png" alt="Over a highway"></td>
 </tr>
 </table>
 
@@ -50,7 +54,8 @@ allows, with ramps that fit beside the road and feet that join the sidewalk. Cli
   cims more than the bridge.
 - **Buildings left standing.** If a ramp would hit a building, the bridge tries other shapes, then moves along the road.
   Only when nothing fits does it work like the game's road tool, and the button says so: "Build and replace 2 buildings".
-- **Wide roads.** Where a road is wider than a footpath can span, the game's own pedestrian bridge carries the deck.
+- **Wide roads.** A footpath spans about 36 m. Over a wider road the game's own arch or cable-stayed pedestrian bridge
+  carries the deck, or Auto picks a spiral, whose deck is shorter.
 - **Honest numbers.** The panel shows the game's own price, the deck height, and how many cims will use the bridge.
 
 ## Installation
@@ -98,6 +103,8 @@ own height. The game draws the preview, prices it, builds it on your click, and 
 ## Known limitations
 
 - Version 1 bridges one road at a time. Junctions, roundabouts, tunnels, rail and water are planned for later.
+- Squeezed between bridges already there, a plan can still overlap them in ways only the game sees. The preview turns red,
+  the panel names the game's reason, and nothing is built.
 - The game has no walkable stairs or lifts, so every design uses ramps.
 - A crosswalk removed is still an unsafe crossing in the game, so some cims will run across. No mod setting changes
   city-wide pathfinding; if you want cims to never jaywalk, a mod like Stop Jaywalking does that.
