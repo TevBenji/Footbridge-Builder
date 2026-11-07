@@ -24,6 +24,13 @@ namespace FootbridgeBuilder.Core
             /// <summary>The crossing's station along the bridged road.</summary>
             public float Station;
             public bool Marked;
+            /// <summary>
+            /// What the walk at street level pays, when it isn't this one crossing's own (over a pair of roads: both roads'
+            /// crossings together); 0 for the crossing's own.
+            /// </summary>
+            public float Penalty;
+            /// <summary>Walking at street level beyond the crossing itself (between a pair of roads' two crossings).</summary>
+            public float Detour;
         }
 
         public struct Result
@@ -48,11 +55,9 @@ namespace FootbridgeBuilder.Core
 
         /// <summary>
         /// Averages three trips: straight over at the bridge, and along the road each way. <paramref name="bridgeWalk"/> gives
-        /// the walk over the bridge from a sidewalk station on one side to one on the other. <paramref name="crossingsOnTheWay"/>
-        /// is how many crossings a walk at street level pays (two over a pair of roads).
+        /// the walk over the bridge from a sidewalk station on one side to one on the other.
         /// </summary>
-        public static Result Estimate(float station, float roadWidth, IReadOnlyList<StreetOption> options, Func<float, float, float> bridgeWalk,
-            float crossingsOnTheWay = 1f)
+        public static Result Estimate(float station, float roadWidth, IReadOnlyList<StreetOption> options, Func<float, float, float> bridgeWalk)
         {
             var result = new Result { Share = 0f };
             var trips = new[] { (station, station), (station - AlongTrip, station + AlongTrip), (station + AlongTrip, station - AlongTrip) };
@@ -66,9 +71,9 @@ namespace FootbridgeBuilder.Core
                 bool competingMarked = false;
                 foreach (var option in options)
                 {
-                    float street = math.abs(option.Station - from) + roadWidth + math.abs(option.Station - to);
+                    float street = math.abs(option.Station - from) + roadWidth + math.abs(option.Station - to) + option.Detour;
                     shortestStreet = math.min(shortestStreet, street);
-                    float optionShare = Share(bridge - street, (option.Marked ? MarkedPenalty : UnsafePenalty) * crossingsOnTheWay);
+                    float optionShare = Share(bridge - street, option.Penalty > 0f ? option.Penalty : option.Marked ? MarkedPenalty : UnsafePenalty);
                     if (optionShare < share || (competing == 0 && optionShare <= share))
                     {
                         share = optionShare;

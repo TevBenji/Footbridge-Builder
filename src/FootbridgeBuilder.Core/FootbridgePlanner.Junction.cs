@@ -152,6 +152,9 @@ namespace FootbridgeBuilder.Core
                     while (gap <= 1e-4f) gap += 2f * math.PI;
                     gaps[k] = gap;
                 }
+                // Where a road carries straight on through a junction, the side between its halves is left open (a U). A
+                // roundabout's ring is always closed: walkers go round it between any two of its roads.
+                bool Open(int k) => !site.Roundabout && gaps[k] >= OpenCorner;
                 // A joined corner's two ends meet where its legs' ramp lines cross; the spans go out that far when the
                 // crossing lies past both legs' junction surface, so the corner is one node.
                 var least = new float[count];
@@ -179,7 +182,7 @@ namespace FootbridgeBuilder.Core
                     bool moved = false;
                     for (int k = 0; k < count; k++)
                     {
-                        if (gaps[k] >= OpenCorner) continue;
+                        if (Open(k)) continue;
                         float apart = math.distance(legs[k].Left, At(k + 1).Right);
                         if (apart < 0.75f || apart >= minPiece + 0.3f) continue;
                         legs[k].Station += 0.5f;
@@ -196,7 +199,7 @@ namespace FootbridgeBuilder.Core
 
                 for (int k = 0; k < count; k++)
                 {
-                    var corner = new Corner { Joined = gaps[k] < OpenCorner, Gap = gaps[k], First = legs[k].Left, Next = At(k + 1).Right };
+                    var corner = new Corner { Joined = !Open(k), Gap = gaps[k], First = legs[k].Left, Next = At(k + 1).Right };
                     if (corner.Joined)
                     {
                         if (math.distance(corner.First, corner.Next) < 0.75f)
@@ -386,20 +389,34 @@ namespace FootbridgeBuilder.Core
             private void EstimateRing(JunctionSite site, Ring ring)
             {
                 int count = ring.Legs.Count;
-                bool kept = Request.CrossingControl == CrossingControl.Off && site.CrossingMarked;
-                float penalty = kept ? CimEstimate.MarkedPenalty : CimEstimate.UnsafePenalty;
+                bool remove = Request.CrossingControl == CrossingControl.RemoveInReach;
+                float junctionPenalty = !remove && site.CrossingMarked ? CimEstimate.MarkedPenalty : CimEstimate.UnsafePenalty;
                 float share = 0f, extra = 0f;
                 for (int k = 0; k < count; k++)
                 {
                     var leg = ring.Legs[k];
+                    float width = leg.Way.Width;
                     Corner before = ring.Corners[(k - 1 + count) % count], after = ring.Corners[k];
                     float span = math.distance(leg.Right, leg.Left);
-                    float straight = RingAccess(before, toNext: true, fromNextLeg: true, RingTrip) + span
-                        + RingAccess(after, toNext: false, fromNextLeg: false, RingTrip) - (2f * RingTrip + leg.Way.Width);
+                    float straight = RingAccess(before, toNext: true, fromNextLeg: true, RingTrip) + span + RingAccess(after, toNext: false, fromNextLeg: false, RingTrip);
                     float round = RingAccess(before, toNext: true, fromNextLeg: false, CimEstimate.AlongTrip) + span
-                        + RingAccess(after, toNext: false, fromNextLeg: true, CimEstimate.AlongTrip) - (2f * CimEstimate.AlongTrip + leg.Way.Width);
-                    share += (CimEstimate.Share(straight, penalty) + 2f * CimEstimate.Share(round, penalty)) / 3f;
-                    extra += straight;
+                        + RingAccess(after, toNext: false, fromNextLeg: true, CimEstimate.AlongTrip);
+                    // At street level a walker crosses the leg at the junction, or at any crossing further along it (an unsafe
+                    // one where its crosswalk was removed): the one that keeps most cims off the bridge counts.
+                    float straightShare = CimEstimate.Share(straight - (2f * RingTrip + width), junctionPenalty);
+                    float roundShare = CimEstimate.Share(round - (2f * CimEstimate.AlongTrip + width), junctionPenalty);
+                    foreach (var crossing in leg.Way.Crossings)
+                    {
+                        float along = leg.Way.Line.Nearest(crossing.Position);
+                        if (math.distance(leg.Way.Line.Point(along).xz, crossing.Position) > width * 0.5f + 4f) continue;
+                        bool marked = crossing.Marked && !(remove && math.distance(crossing.Position, site.Centre.xz) <= Request.CrossingReach);
+                        float penalty = marked ? CimEstimate.MarkedPenalty : CimEstimate.UnsafePenalty;
+                        straightShare = math.min(straightShare, CimEstimate.Share(straight - (2f * math.abs(along - RingTrip) + width), penalty));
+                        // Round the corner to the leg, out along it to the crossing, over and back.
+                        roundShare = math.min(roundShare, CimEstimate.Share(round - (2f * CimEstimate.AlongTrip + 2f * along + width), penalty));
+                    }
+                    share += (straightShare + 2f * roundShare) / 3f;
+                    extra += straight - (2f * RingTrip + width);
                 }
                 ring.Share = share / count;
                 ring.ExtraWalk = extra / count;

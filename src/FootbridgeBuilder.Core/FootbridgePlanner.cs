@@ -966,24 +966,35 @@ namespace FootbridgeBuilder.Core
             {
                 var crossings = new List<CimEstimate.StreetOption>();
                 float centre = candidate.Station;
+                float2 middle = Road.Point(centre).xz;
+                bool Kept(Crossing crossing) => crossing.Marked
+                    && !(Request.CrossingControl == CrossingControl.RemoveInReach && math.distance(crossing.Position, middle) <= Request.CrossingReach);
+                float Penalty(bool marked) => marked ? CimEstimate.MarkedPenalty : CimEstimate.UnsafePenalty;
                 foreach (var crossing in Request.Crossings ?? Array.Empty<Crossing>())
                 {
                     float at = Road.Nearest(crossing.Position);
                     if (math.distance(Road.Point(at).xz, crossing.Position) > Request.RoadWidth * 0.5f + 4f) continue;
-                    bool removed = Request.CrossingControl == CrossingControl.RemoveInReach
-                        && math.distance(crossing.Position, Road.Point(centre).xz) <= Request.CrossingReach;
-                    crossings.Add(new CimEstimate.StreetOption { Id = crossing.Id, Station = at, Marked = crossing.Marked && !removed });
+                    var option = new CimEstimate.StreetOption { Id = crossing.Id, Station = at, Marked = Kept(crossing) };
+                    if (beside != null)
+                    {
+                        // Over two roads a walk at street level crosses this one here and the other at its nearest crossing,
+                        // paying both; with no crossing on the other road there's no way over at street level.
+                        Crossing pair = null;
+                        foreach (var other in beside.Crossings)
+                            if (pair == null || math.distance(other.Position, crossing.Position) < math.distance(pair.Position, crossing.Position)) pair = other;
+                        if (pair == null) continue;
+                        bool pairKept = Kept(pair);
+                        option.Penalty = Penalty(option.Marked) + Penalty(pairKept);
+                        option.Detour = math.abs(Road.Nearest(pair.Position) - at);
+                        option.Marked |= pairKept;
+                    }
+                    crossings.Add(option);
                 }
                 float deck = math.distance(candidate.A.Landing, candidate.B.Landing);
-                // Over two roads the walk at street level crosses both, kerb to kerb, and pays two crossings.
+                // Over two roads the walk at street level goes kerb to kerb over both.
                 float width = Request.RoadWidth;
-                if (beside != null)
-                {
-                    float2 at = Road.Point(centre).xz;
-                    width = math.distance(at, beside.Line.Point(beside.Line.Nearest(at)).xz) + (Request.RoadWidth + beside.Width) * 0.5f;
-                }
-                return CimEstimate.Estimate(centre, width, crossings,
-                    (from, to) => SideWalk(candidate.A, from) + deck + SideWalk(candidate.B, to), beside != null ? 2f : 1f);
+                if (beside != null) width = math.distance(middle, beside.Line.Point(beside.Line.Nearest(middle)).xz) + (Request.RoadWidth + beside.Width) * 0.5f;
+                return CimEstimate.Estimate(centre, width, crossings, (from, to) => SideWalk(candidate.A, from) + deck + SideWalk(candidate.B, to));
             }
 
             // ── output ──
