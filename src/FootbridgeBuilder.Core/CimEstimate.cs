@@ -24,6 +24,17 @@ namespace FootbridgeBuilder.Core
             /// <summary>The crossing's station along the bridged road.</summary>
             public float Station;
             public bool Marked;
+            /// <summary>
+            /// What the walk at street level pays, when it isn't this one crossing's own (over a pair of roads: both roads'
+            /// crossings together); 0 for the crossing's own.
+            /// </summary>
+            public float Penalty;
+            /// <summary>
+            /// Over a pair of roads: the walk crosses the first road at <see cref="Station"/> and the second at this station,
+            /// walking between the two crossings in the gap.
+            /// </summary>
+            public bool Paired;
+            public float FarStation;
         }
 
         public struct Result
@@ -64,9 +75,11 @@ namespace FootbridgeBuilder.Core
                 bool competingMarked = false;
                 foreach (var option in options)
                 {
-                    float street = math.abs(option.Station - from) + roadWidth + math.abs(option.Station - to);
+                    // Each end of the walk is measured to the crossing on its own side; a pair of crossings adds the walk between them.
+                    float far = option.Paired ? option.FarStation : option.Station;
+                    float street = math.abs(option.Station - from) + math.abs(far - option.Station) + roadWidth + math.abs(far - to);
                     shortestStreet = math.min(shortestStreet, street);
-                    float optionShare = Share(bridge - street, option.Marked ? MarkedPenalty : UnsafePenalty);
+                    float optionShare = Share(bridge - street, option.Penalty > 0f ? option.Penalty : option.Marked ? MarkedPenalty : UnsafePenalty);
                     if (optionShare < share || (competing == 0 && optionShare <= share))
                     {
                         share = optionShare;

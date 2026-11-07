@@ -68,6 +68,36 @@ namespace FootbridgeBuilder.Core
         public float ClearDistance;
     }
 
+    /// <summary>A road other than the hovered one: the road right beside it, or one leg of a junction.</summary>
+    public sealed class Street
+    {
+        /// <summary>The centre line, about 2 m apart. A junction's leg runs outward from the junction.</summary>
+        public float3[] Line = Array.Empty<float3>();
+        public float Width = 12f;
+        public bool Sidewalks = true;
+        /// <summary>The lowest deck the game accepts over this road, measured from its surface.</summary>
+        public float Clearance = 6f;
+        /// <summary>A junction's leg: how far from the junction's centre the junction's own surface reaches along it.</summary>
+        public float Clear;
+        /// <summary>The street crossings along it (a junction's own are on <see cref="JunctionSite"/>).</summary>
+        public IReadOnlyList<Crossing> Crossings = Array.Empty<Crossing>();
+        /// <summary>Its net pieces' ids, as on their obstacle outlines: a bridge over both roads treats them as the bridged road.</summary>
+        public IReadOnlyList<long> Ids = Array.Empty<long>();
+    }
+
+    /// <summary>A junction or roundabout under the cursor: the bridge goes round it, over every leg.</summary>
+    public sealed class JunctionSite
+    {
+        public float3 Centre;
+        public bool Roundabout;
+        /// <summary>How far from the centre the junction's own surface reaches: the deck between legs stays outside it.</summary>
+        public float Reach;
+        /// <summary>The junction's own street crossings (one id for all its legs).</summary>
+        public long CrossingId;
+        public bool CrossingMarked;
+        public IReadOnlyList<Street> Legs = Array.Empty<Street>();
+    }
+
     public sealed class BridgeRequest
     {
         /// <summary>The road's centre line, about 2 m apart, running on through its straight-on neighbours.</summary>
@@ -87,6 +117,13 @@ namespace FootbridgeBuilder.Core
         public Func<float2, float> Ground = _ => 0f;
         public IReadOnlyList<Obstacle> Obstacles = Array.Empty<Obstacle>();
         public IReadOnlyList<Crossing> Crossings = Array.Empty<Crossing>();
+        /// <summary>
+        /// A road running right beside the hovered one (the other half of a divided highway, a frontage road), or null.
+        /// When it's close enough, with no building between, the bridge goes over both.
+        /// </summary>
+        public Street Beside;
+        /// <summary>The junction or roundabout under the cursor, or null: when set, the bridge goes round it over every leg.</summary>
+        public JunctionSite Junction;
     }
 
     public struct PlannedNode
@@ -129,6 +166,8 @@ namespace FootbridgeBuilder.Core
         public float UseShare;
         public string UseLabel = "";
         public readonly List<long> CrossingsToRemove = new List<long>();
+        /// <summary>The bridge goes over the road beside the hovered one too, so that road's crossings are among those to remove.</summary>
+        public bool OverBothRoads;
         /// <summary>The street crossing that competes hardest after the build, 0 when none.</summary>
         public long CompetingCrossing;
         public bool CompetingMarked;

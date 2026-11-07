@@ -3,7 +3,7 @@
 <img align="right" src="src/FootbridgeBuilder/Properties/Thumbnail.png" alt="Footbridge Builder" width="260">
 
 <a href="https://mods.paradoxplaza.com/authors/TevBenji/cities_skylines_2"><img alt="Paradox Mods: Footbridge Builder" src="https://img.shields.io/badge/Paradox%20Mods-Footbridge%20Builder-2ea44f"></a>
-<img alt="Version" src="https://img.shields.io/badge/version-0.1.0-1f6feb">
+<img alt="Version" src="https://img.shields.io/badge/version-0.2.0-1f6feb">
 <img alt="Game version" src="https://img.shields.io/badge/Cities%3A%20Skylines%20II-1.6-0e7490">
 <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0-c2410c"></a>
 
@@ -11,7 +11,8 @@ A Cities: Skylines II mod that puts a working pedestrian bridge over a road in o
 
 Building a footbridge by hand takes three mods and a lot of fiddling, and then the cims cross at street level anyway.
 **Footbridge Builder does it for you.** Hover a road and the bridge appears, as low as the game allows, with ramps that fit
-beside the road and feet that join the sidewalk. A green outline means it fits. Click, and it's built.
+beside the road and feet that join the sidewalk. A green outline means it fits. Click, and it's built. Hover the middle of
+a junction or roundabout instead, and one bridge goes round it, over every road there.
 
 <a href="#features">Features</a> ·
 <a href="#how-to-use">How to use</a> ·
@@ -58,6 +59,13 @@ In the game:
   cims more than the bridge.
 - **Buildings left standing.** If a ramp would hit a building, the bridge tries other shapes, then moves along the road.
   Only when nothing fits does it work like the game's road tool, and the button says so: **Build and replace 2 buildings**.
+- **Whole junctions and roundabouts.** Hover the middle of a junction and one bridge goes round it: a span over every road,
+  just past the junction, joined at the corners, with ramps down each corner's sidewalks. Where a road carries straight on,
+  the side between its two halves stays open, so a T-junction gets a U. A roundabout gets a ring just outside it, crossing
+  every road into it.
+- **Two roads at once.** Where another road runs right beside the one you hover (the other half of a divided highway, a
+  frontage road) with nothing built between them, the bridge goes over both. When that's too far for one span, the deck
+  rests on a pillar between the two roads.
 - **Wide roads.** A footpath spans about 36 m. Over a wider road the game's own arch or covered pedestrian bridge
   carries the deck, up to about 40 m. (The cable-stayed one is left out: its tower would stand in the traffic.)
 
@@ -76,7 +84,7 @@ the game's mod browser, and restart the game. It needs no other mods.
 
 1. Open the tool: click the **bridge** button in the bottom toolbar beside Zones, or press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>.
 2. **Hover a road.** The bridge appears and follows the cursor. Near a junction it snaps to the street crossing, where cims
-   already cross.
+   already cross. **Hover the middle of a junction or a roundabout** for a ring over every road there.
 3. **Read the outline.** Green: it fits. Red: nothing fits here, and the panel says what's in the way. Move along the road,
    or turn it with <kbd>[</kbd> and <kbd>]</kbd>.
 4. **Click** (or press the green **Build** button). The panel reports what was built: pieces, sidewalk joins, crossings
@@ -85,6 +93,7 @@ the game's mod browser, and restart the game. It needs no other mods.
 | Control | Action |
 |---|---|
 | Hover a road | Plan a bridge there |
+| Hover the middle of a junction or roundabout | Plan a ring over every road there |
 | Left-click | Build it, when the outline is green |
 | <kbd>[</kbd> <kbd>]</kbd> | Turn the bridge 5° at a time, up to 30° each way |
 | <kbd>Esc</kbd> | Clear the bridge; press again to close the tool |
@@ -112,6 +121,16 @@ the game's mod browser, and restart the game. It needs no other mods.
 | **Spiral ramp** | A ramp that coils down beside the road where there's little room along it. |
 | **Diagonal span** | The deck crosses at a slant, so its ramps start further along the road. |
 | **Snake deck** | A deck that swings out across the road and curves down into its ramps. |
+
+A bridge over a pair of roads uses the design you pick, as a bridge over one road does. Hovering the middle of a junction
+or a roundabout always gives a ring, whatever the design setting:
+
+| Shape | What you get |
+|---|---|
+| **Ring round a junction** | A span over every road, joined at the corners, with ramps down every corner. |
+| **U round a junction** | The same, open on the side where a road carries straight on (a T-junction). |
+| **Ring round a roundabout** | A ring just outside the roundabout, crossing every road into it. |
+| **Over both roads** | One deck over a pair of roads side by side, on a pillar between them if it's too long for one span. |
 
 ## Settings
 
@@ -168,7 +187,7 @@ own height. The game draws the preview, prices it, builds it on your click, and 
 
 ## Known limitations
 
-- Version 1 bridges one road at a time. Junctions, roundabouts, tunnels, rail and water are planned for later.
+- Tunnels, rail and water are planned for later. A raised road meeting at a junction is left out of its ring.
 - The game has the last word. If it refuses part of a bridge the planner thought would fit, the outline turns red, the
   panel names the game's reason, and nothing is built.
 - The game has no walkable stairs or lifts, so every design uses ramps.

@@ -92,7 +92,7 @@ export function readState(raw: unknown): ToolState {
 
 export function statusLine(state: ToolState): string {
     switch (state.stage) {
-        case "Hovering": return state.summary || "Hover a road.";
+        case "Hovering": return state.summary || "Hover a road or the middle of a junction.";
         case "Planned": return state.buildable ? state.designName || "Ready to build" : "No bridge fits here.";
         case "Building": return "Building...";
         case "Built": return state.summary || "Built";
