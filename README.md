@@ -122,8 +122,8 @@ the game's mod browser, and restart the game. It needs no other mods.
 | **Diagonal span** | The deck crosses at a slant, so its ramps start further along the road. |
 | **Snake deck** | A deck that swings out across the road and curves down into its ramps. |
 
-Hovering a junction or a second road beside the first picks the shape itself; the design setting applies to bridges over
-one road:
+A bridge over a pair of roads uses the design you pick, as a bridge over one road does. Hovering the middle of a junction
+or a roundabout always gives a ring, whatever the design setting:
 
 | Shape | What you get |
 |---|---|
