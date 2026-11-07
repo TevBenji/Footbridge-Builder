@@ -459,6 +459,7 @@ namespace FootbridgeBuilder.Tool
                 Road = snapshot.Road,
                 RoadWidth = snapshot.RoadWidth,
                 RoadHasSidewalks = snapshot.Sidewalks,
+                RoadPillarBands = snapshot.PillarBands,
                 Cursor = point.xz,
                 TurnDegrees = turn,
                 Clearance = snapshot.Clearance,

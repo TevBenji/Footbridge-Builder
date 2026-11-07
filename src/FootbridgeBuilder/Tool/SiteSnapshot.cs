@@ -45,6 +45,8 @@ namespace FootbridgeBuilder.Tool
         public float RoadWidth;
         public bool Sidewalks;
         public float Clearance;
+        /// <summary>Where a pillar may stand across the hovered road (its median), along the hovered edge's direction.</summary>
+        public float2[] PillarBands = Array.Empty<float2>();
         public readonly List<Entity> Chain = new List<Entity>();
         public readonly Dictionary<long, CrossingNode> CrossingNodes = new Dictionary<long, CrossingNode>();
         /// <summary>
@@ -248,6 +250,7 @@ namespace FootbridgeBuilder.Tool
             Entity prefab = entities.GetComponentData<PrefabRef>(edge).m_Prefab;
             snapshot.Sidewalks = HasPedestrianLanes(entities, edge);
             snapshot.Clearance = Clearance(composition, path);
+            snapshot.PillarBands = PillarBands(entities, edge);
             // The roads the bridge goes over: outlined as the bridged road, never as obstacles.
             var hosts = new HashSet<Entity>();
             Entity junction = JunctionAt(entities, edge, hit.xz);
@@ -461,6 +464,7 @@ namespace FootbridgeBuilder.Tool
                 {
                     Line = line, Width = composition.m_Width, Sidewalks = legSidewalks, Clearance = Clearance(composition, path),
                     Clear = Cut(entities, edge, node), Crossings = crossings,
+                    PillarBands = outward ? PillarBands(entities, edge) : Reversed(PillarBands(entities, edge)),
                 });
                 crossing.Lines.Add(line);
                 crossing.Ends.Add((edge, outward));
@@ -565,8 +569,51 @@ namespace FootbridgeBuilder.Tool
             return new Street
             {
                 Line = line, Width = foundComposition.m_Width, Sidewalks = sidewalks, Clearance = Clearance(foundComposition, path),
-                Crossings = crossings, Ids = ids,
+                Crossings = crossings, Ids = ids, PillarBands = PillarBands(entities, found),
             };
+        }
+
+        /// <summary>
+        /// Where a pillar may stand across a road, as offsets from its centre line (left of the edge's direction positive):
+        /// the gaps at least 1.5 m wide between its traffic lanes (car, track, parking), with lanes on both sides, which is a
+        /// median. The game accepted a footbridge pillar on the median of every divided road and refused one in the lanes
+        /// (test city, 7 November 2026). Master lanes stand for a group of lanes and are left out.
+        /// </summary>
+        public static float2[] PillarBands(EntityManager entities, Entity edge)
+        {
+            if (!entities.HasBuffer<Game.Net.SubLane>(edge) || !entities.HasComponent<Curve>(edge)) return Array.Empty<float2>();
+            var curve = entities.GetComponentData<Curve>(edge).m_Bezier;
+            var lanes = new List<float2>();
+            foreach (var sub in entities.GetBuffer<Game.Net.SubLane>(edge, true))
+            {
+                var lane = sub.m_SubLane;
+                if (entities.HasComponent<MasterLane>(lane) || !entities.HasComponent<Curve>(lane) || !entities.HasComponent<PrefabRef>(lane)) continue;
+                if (!entities.HasComponent<Game.Net.CarLane>(lane) && !entities.HasComponent<Game.Net.TrackLane>(lane) && !entities.HasComponent<Game.Net.ParkingLane>(lane)) continue;
+                Entity prefab = entities.GetComponentData<PrefabRef>(lane).m_Prefab;
+                float width = entities.HasComponent<NetLaneData>(prefab) ? entities.GetComponentData<NetLaneData>(prefab).m_Width : 3f;
+                float3 middle = MathUtils.Position(entities.GetComponentData<Curve>(lane).m_Bezier, 0.5f);
+                MathUtils.Distance(curve.xz, middle.xz, out float t);
+                float2 tangent = math.normalizesafe(MathUtils.Tangent(curve, t).xz), offset = middle.xz - MathUtils.Position(curve, t).xz;
+                float across = tangent.x * offset.y - tangent.y * offset.x;
+                lanes.Add(new float2(across - width * 0.5f, across + width * 0.5f));
+            }
+            lanes.Sort((x, y) => x.x.CompareTo(y.x));
+            var bands = new List<float2>();
+            float reached = float.MinValue;
+            for (int index = 0; index < lanes.Count; index++)
+            {
+                if (index > 0 && lanes[index].x - reached >= 1.5f) bands.Add(new float2(reached, lanes[index].x));
+                reached = math.max(reached, lanes[index].y);
+            }
+            return bands.ToArray();
+        }
+
+        /// <summary>The bands as seen along the edge the other way round.</summary>
+        private static float2[] Reversed(float2[] bands)
+        {
+            var turned = new float2[bands.Length];
+            for (int index = 0; index < bands.Length; index++) turned[bands.Length - 1 - index] = new float2(-bands[index].y, -bands[index].x);
+            return turned;
         }
 
         private static float2 Closest(float2 point, float2 from, float2 to)

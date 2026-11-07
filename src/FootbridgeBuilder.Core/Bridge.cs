@@ -83,6 +83,8 @@ namespace FootbridgeBuilder.Core
         public IReadOnlyList<Crossing> Crossings = Array.Empty<Crossing>();
         /// <summary>Its net pieces' ids, as on their obstacle outlines: a bridge over both roads treats them as the bridged road.</summary>
         public IReadOnlyList<long> Ids = Array.Empty<long>();
+        /// <summary>Where a pillar may stand across it (a median), as offsets from the centre line, left of its direction positive.</summary>
+        public float2[] PillarBands = Array.Empty<float2>();
     }
 
     /// <summary>A junction or roundabout under the cursor: the bridge goes round it, over every leg.</summary>
@@ -105,6 +107,8 @@ namespace FootbridgeBuilder.Core
         /// <summary>The road's full width, sidewalks included.</summary>
         public float RoadWidth = 12f;
         public bool RoadHasSidewalks = true;
+        /// <summary>Where a pillar may stand across the road (a median), as offsets from the centre line, left of its direction positive.</summary>
+        public float2[] RoadPillarBands = Array.Empty<float2>();
         public float2 Cursor;
         public float TurnDegrees;
         /// <summary>The lowest deck the game accepts over this road, measured from the road surface.</summary>

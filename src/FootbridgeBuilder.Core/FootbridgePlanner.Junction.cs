@@ -36,6 +36,8 @@ namespace FootbridgeBuilder.Core
                 public float Station;
                 /// <summary>The span's ends: on the leg's right (towards the previous leg) and its left (towards the next).</summary>
                 public float2 Right, Left;
+                /// <summary>A span too long for one piece: the pillars it rests on (on the leg's median), from Right to Left.</summary>
+                public List<float2> Pillars;
             }
 
             /// <summary>The corner between a leg and the next one counterclockwise.</summary>
@@ -66,6 +68,9 @@ namespace FootbridgeBuilder.Core
             {
                 var site = Request.Junction;
                 var legs = RingLegs(site);
+                var legWays = new List<Way>();
+                foreach (var leg in legs) legWays.Add(leg.Way);
+                pillarWays = legWays;
                 if (legs.Count < (site.Roundabout ? 2 : 3))
                 {
                     plan.Messages.Add("Hover the middle of a junction where three roads or more meet.");
@@ -124,7 +129,7 @@ namespace FootbridgeBuilder.Core
                 foreach (var street in site.Legs ?? Array.Empty<Street>())
                 {
                     if (street?.Line == null || street.Line.Length < 2) continue;
-                    var way = MakeWay(street.Line, street.Width, street.Sidewalks, street.Clearance, street.Crossings);
+                    var way = MakeWay(street.Line, street.Width, street.Sidewalks, street.Clearance, street.Crossings, street.PillarBands);
                     // The span's own width and a metre more past the junction's surface.
                     float clear = math.max(0f, street.Clear) + half + 1f;
                     float2 direction = math.normalizesafe(way.Line.Point(math.min(way.Line.Length, clear)).xz - site.Centre.xz, way.Line.Tangent(0f));
@@ -232,10 +237,20 @@ namespace FootbridgeBuilder.Core
                 if (under > deckY && under <= deckY + MostRise) deckY = under + 0.05f;
                 var ways = new List<Way>();
                 foreach (var leg in legs) ways.Add(leg.Way);
+                // A span too long for one piece rests on its leg's median, if it has one.
+                foreach (var leg in legs)
+                {
+                    if (ignoreObstacles || math.distance(leg.Right, leg.Left) <= SpanLimit) continue;
+                    leg.Pillars = Supports(leg.Right, leg.Left, deckY);
+                    if (leg.Pillars == null) { why = "a road at the junction is too wide for one span of this path, with nowhere between for a pillar"; return null; }
+                }
+                // A span resting on a road's median: the game re-makes that road while it shows the ring (see MedianLift).
+                foreach (var leg in legs)
+                    if (OnARoad(leg.Pillars)) { deckY += MedianLift; break; }
                 for (int attempt = 0; ; attempt++)
                 {
                     float shortfall = 0f;
-                    foreach (var leg in legs) shortfall = math.max(shortfall, DeckShortfall(leg.Right, leg.Left, deckY, ways));
+                    foreach (var leg in legs) shortfall = math.max(shortfall, DeckShortfall(leg.Right, leg.Left, leg.Pillars, deckY, ways));
                     if (shortfall <= 0.01f) break;
                     if (attempt == 2)
                     {
@@ -249,7 +264,12 @@ namespace FootbridgeBuilder.Core
 
                 // Every deck node stands on a pillar, at a height the path can be raised to.
                 var deckNodes = new List<float2>();
-                foreach (var leg in legs) { deckNodes.Add(leg.Right); deckNodes.Add(leg.Left); }
+                foreach (var leg in legs)
+                {
+                    deckNodes.Add(leg.Right);
+                    deckNodes.Add(leg.Left);
+                    if (leg.Pillars != null) deckNodes.AddRange(leg.Pillars);
+                }
                 foreach (var corner in ring.Corners)
                     if (corner.Link != null)
                         foreach (float stop in LinkStops(corner.Link)) deckNodes.Add(corner.Link.Position(stop));
@@ -263,7 +283,6 @@ namespace FootbridgeBuilder.Core
                 }
                 foreach (var leg in legs)
                 {
-                    if (!ignoreObstacles && math.distance(leg.Right, leg.Left) > SpanLimit) { why = "a road at the junction is too wide for one span of this path"; return null; }
                     if (!ignoreObstacles && OverANode(leg.Way, leg.Station, 0f)) { why = "the deck would pass over another road node"; return null; }
                     string problem = CheckLine(leg.Right, deckY, leg.Left, deckY, deck: true, ring.Buildings);
                     if (problem.Length > 0) { why = problem; return null; }
@@ -496,7 +515,7 @@ namespace FootbridgeBuilder.Core
                     nextNode[k] = corner.Shared ? firstNode[k] : AddNode(plan, corner.Next, ring.DeckY, groundEnd: false);
                 }
                 // Leg k's span runs from the corner before it (that corner's next end) to the corner after it (its first end).
-                for (int k = 0; k < count; k++) AddDeck(plan, nextNode[(k - 1 + count) % count], firstNode[k], deck: true);
+                for (int k = 0; k < count; k++) AddDecks(plan, nextNode[(k - 1 + count) % count], firstNode[k], ring.Legs[k].Pillars, ring.DeckY);
                 for (int k = 0; k < count; k++)
                 {
                     var corner = ring.Corners[k];

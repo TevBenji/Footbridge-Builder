@@ -16,7 +16,7 @@ Building a footbridge by hand takes three mods and a lot of fiddling, and then t
 - **Buildings left standing** wherever a shape fits; otherwise the button says how many go, as the game's road tool does
 - **Whole junctions and roundabouts**: hover the middle and one bridge goes round it, a span over every road with ramps down each corner (a U at a T-junction, a ring just outside a roundabout)
 - **Two roads at once**: where another road runs right beside the one you hover, like the two halves of a divided highway, the bridge goes over both
-- **Wide roads** get the game's own arch or covered pedestrian bridge as the deck
+- **Wide roads** get the game's own arch or covered pedestrian bridge as the deck, and a divided road too wide even for that gets a pillar in its median, so even the 8-lane XL road gets one bridge
 
 ### How to use it
 
@@ -50,9 +50,9 @@ Inspired by kianzarrin's Automatic Pedestrian Bridge Builder for the first game.
 	<Screenshot Value="Properties/Screenshots/05.png" />
 	<Screenshot Value="Properties/Screenshots/06.png" />
 	<Tag Value="Code Mod" />
-	<ModVersion Value="0.2.0" />
+	<ModVersion Value="0.3.0" />
 	<GameVersion Value="1.6.*" />
-	<ChangeLog Value="- Hover the middle of a junction or roundabout: one bridge goes round it, a span over every road with ramps down each corner (a U at a T-junction, a ring just outside a roundabout).&#10;- Two roads at once: where another road runs right beside the one you hover, like the two halves of a divided highway, the bridge goes over both, on a pillar between them when that's too far for one span." />
+	<ChangeLog Value="- Wide divided roads: a deck too long for one span rests on a pillar in the road's median, so even the 8-lane XL road gets one bridge, and a ring at its junctions. Pillars stand only where the game allows one: in a median or between two roads, never in the lanes." />
 	<!--The forum thread whose replies show as the Discussion on the mod page-->
 	<ForumLink Value="https://forum.paradoxplaza.com/forum/threads/mod-footbridge-builder-one-click-pedestrian-bridges-discussion-feedback.1948815/" />
 	<ExternalLink Type="github" Url="https://github.com/TevBenji/Footbridge-Builder" />
