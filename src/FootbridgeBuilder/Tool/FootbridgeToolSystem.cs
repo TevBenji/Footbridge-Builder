@@ -639,13 +639,17 @@ namespace FootbridgeBuilder.Tool
         /// </summary>
         private Entity PrefabFor(BridgePlan bridge, PlannedPiece piece)
         {
-            if (!piece.Deck) return planPath.Prefab;
+            Entity chosen = planPath.Prefab;
             float span = math.distance(bridge.Position(piece.Start).xz, bridge.Position(piece.End).xz);
-            if (span <= planPath.Span - 0.5f) return planPath.Prefab;
-            foreach (var candidate in bridges)
-                if (span >= candidate.Shortest && span <= candidate.Longest - 0.5f) return candidate.Prefab;
-            return planPath.Prefab;
+            if (piece.Deck && span > planPath.Span - 0.5f)
+                foreach (var candidate in bridges)
+                    if (span >= candidate.Shortest && span <= candidate.Longest - 0.5f) { chosen = candidate.Prefab; break; }
+            DevPrefab(piece, ref chosen);
+            return chosen;
         }
+
+        /// <summary>The local test runner's choice of deck prefab for a probe (Dev build only; empty otherwise).</summary>
+        partial void DevPrefab(PlannedPiece piece, ref Entity prefab);
 
         // The game has turned the definitions into temporaries once their number stops changing.
         private bool Settle(int frame, int since)
