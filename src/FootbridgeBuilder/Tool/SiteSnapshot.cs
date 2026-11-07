@@ -390,7 +390,26 @@ namespace FootbridgeBuilder.Tool
         /// <summary>Three roads or more meet at the node, or it is a roundabout.</summary>
         public static bool IsJunction(EntityManager entities, Entity node) =>
             node != Entity.Null && entities.Exists(node) && entities.HasComponent<Node>(node) && entities.HasBuffer<ConnectedEdge>(node)
-            && (entities.HasComponent<Roundabout>(node) || RoadEdges(entities, node, out _, Entity.Null) >= 3);
+            && (IsRoundabout(entities, node) || RoadEdges(entities, node, out _, Entity.Null) >= 3);
+
+        /// <summary>
+        /// A roundabout: the game's roundabout objects mark the junction's own surface with the roundabout flag, on the node end
+        /// of every road meeting there (seen in the test city: no Roundabout component on the node).
+        /// </summary>
+        public static bool IsRoundabout(EntityManager entities, Entity node)
+        {
+            if (entities.HasComponent<Roundabout>(node)) return true;
+            foreach (var connected in entities.GetBuffer<ConnectedEdge>(node, true))
+            {
+                var edge = connected.m_Edge;
+                if (!entities.HasComponent<Composition>(edge) || !entities.HasComponent<Edge>(edge)) continue;
+                var composition = entities.GetComponentData<Composition>(edge);
+                Entity end = entities.GetComponentData<Edge>(edge).m_Start == node ? composition.m_StartNode : composition.m_EndNode;
+                if (entities.HasComponent<NetCompositionData>(end)
+                    && (entities.GetComponentData<NetCompositionData>(end).m_Flags.m_General & CompositionFlags.General.Roundabout) != 0) return true;
+            }
+            return false;
+        }
 
         /// <summary>How far a junction's own surface reaches from its centre: to where its farthest road's own surface starts, or round a roundabout's ring.</summary>
         private static float NodeReach(EntityManager entities, Entity node)
@@ -447,8 +466,9 @@ namespace FootbridgeBuilder.Tool
                 crossing.Ends.Add((edge, outward));
                 crossing.RoadWidth = math.max(crossing.RoadWidth, composition.m_Width);
                 sidewalks |= legSidewalks;
+                AddJunctionSurface(entities, snapshot, edge, outward, node, centre.y, composition);
             }
-            var site = new JunctionSite { Centre = centre, Roundabout = entities.HasComponent<Roundabout>(node), Reach = NodeReach(entities, node), Legs = legs };
+            var site = new JunctionSite { Centre = centre, Roundabout = IsRoundabout(entities, node), Reach = NodeReach(entities, node), Legs = legs };
             if (sidewalks)
             {
                 long id = SiteArea.Pack(node);
@@ -458,6 +478,31 @@ namespace FootbridgeBuilder.Tool
                 site.CrossingMarked = crossing.Marked;
             }
             snapshot.Junction = site;
+        }
+
+        /// <summary>
+        /// The junction's own surface where this road meets it (its rounded corners, and a roundabout's ring), as outlines the
+        /// ring's pillars and ramps stay off: a ring whose corners stood on it was refused in the test city. Each road's
+        /// node-end geometry is two strips, each between a left and a right curve.
+        /// </summary>
+        private static void AddJunctionSurface(EntityManager entities, HoverSnapshot snapshot, Entity edge, bool atStart, Entity node, float surface, NetCompositionData composition)
+        {
+            EdgeNodeGeometry geometry;
+            if (atStart && entities.HasComponent<StartNodeGeometry>(edge)) geometry = entities.GetComponentData<StartNodeGeometry>(edge).m_Geometry;
+            else if (!atStart && entities.HasComponent<EndNodeGeometry>(edge)) geometry = entities.GetComponentData<EndNodeGeometry>(edge).m_Geometry;
+            else return;
+            foreach (var strip in new[] { geometry.m_Left, geometry.m_Right })
+                for (int step = 0; step < 4; step++)
+                {
+                    float from = step / 4f, to = (step + 1) / 4f;
+                    snapshot.Obstacles.Add(new Obstacle
+                    {
+                        A = MathUtils.Position(strip.m_Left, from).xz, B = MathUtils.Position(strip.m_Left, to).xz,
+                        C = MathUtils.Position(strip.m_Right, to).xz, D = MathUtils.Position(strip.m_Right, from).xz,
+                        Kind = ObstacleKind.Net, Surface = surface, Below = composition.m_HeightRange.min, Above = composition.m_HeightRange.max,
+                        Id = SiteArea.Pack(node),
+                    });
+                }
         }
 
         /// <summary>
