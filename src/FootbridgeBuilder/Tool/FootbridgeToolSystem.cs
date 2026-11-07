@@ -500,7 +500,7 @@ namespace FootbridgeBuilder.Tool
             State.ExtraWalk = plan.ExtraWalk;
             State.CompetingMarked = plan.CompetingMarked;
             State.CompetingDistance = plan.CompetingDistance;
-            State.CrossingsRemoved = plan.CrossingsToRemove.Count(id => planSnapshot.CrossingNodes.TryGetValue(id, out var node) && node.Marked);
+            State.CrossingsRemoved = plan.CrossingsToRemove.Count(id => CrossingFor(plan, planSnapshot, id) is CrossingNode node && node.Marked);
             State.Cost = -1;
             State.Refused = State.BuildingsReplaced = 0;
             State.Summary = plan.Buildable ? plan.DesignName : "No bridge fits here.";
@@ -751,6 +751,24 @@ namespace FootbridgeBuilder.Tool
             }
         }
 
+        /// <summary>
+        /// A crossing the plan removes: on the bridged road, or on the road beside when the bridge goes over both. A node on both
+        /// roads is then one crossing with both roads' lines and edge ends.
+        /// </summary>
+        private static CrossingNode CrossingFor(BridgePlan bridge, HoverSnapshot snapshot, long id)
+        {
+            snapshot.CrossingNodes.TryGetValue(id, out var own);
+            CrossingNode beside = null;
+            if (bridge.OverBothRoads) snapshot.BesideCrossingNodes.TryGetValue(id, out beside);
+            if (own == null || beside == null) return own ?? beside;
+            var both = new CrossingNode { Node = own.Node, Position = own.Position, Marked = own.Marked || beside.Marked, RoadWidth = math.max(own.RoadWidth, beside.RoadWidth) };
+            both.Lines.AddRange(own.Lines);
+            both.Lines.AddRange(beside.Lines);
+            both.Ends.AddRange(own.Ends);
+            both.Ends.AddRange(beside.Ends);
+            return both;
+        }
+
         private void EmitCrossings()
         {
             upgrades.Clear();
@@ -759,7 +777,7 @@ namespace FootbridgeBuilder.Tool
             var ends = new Dictionary<Entity, (bool Start, bool End)>();
             foreach (long id in plan.CrossingsToRemove)
             {
-                if (!planSnapshot.CrossingNodes.TryGetValue(id, out var crossing) || !crossing.Marked) continue;
+                if (!(CrossingFor(plan, planSnapshot, id) is CrossingNode crossing) || !crossing.Marked) continue;
                 foreach (var (edge, atStart) in Fresh(crossing).Ends)
                 {
                     ends.TryGetValue(edge, out var both);
@@ -944,7 +962,7 @@ namespace FootbridgeBuilder.Tool
             int wanted = 0, removed = 0;
             foreach (long id in plan.CrossingsToRemove)
             {
-                if (!planSnapshot.CrossingNodes.TryGetValue(id, out var crossing) || !crossing.Marked) continue;
+                if (!(CrossingFor(plan, planSnapshot, id) is CrossingNode crossing) || !crossing.Marked) continue;
                 wanted++;
                 var (node, fresh) = Fresh(crossing);
                 if (node != Entity.Null && SiteSnapshot.MarkedCrossings(EntityManager, node, fresh, crossing.RoadWidth) == 0) removed++;

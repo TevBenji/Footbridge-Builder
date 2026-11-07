@@ -166,6 +166,8 @@ namespace FootbridgeBuilder.Core
         public float UseShare;
         public string UseLabel = "";
         public readonly List<long> CrossingsToRemove = new List<long>();
+        /// <summary>The bridge goes over the road beside the hovered one too, so that road's crossings are among those to remove.</summary>
+        public bool OverBothRoads;
         /// <summary>The street crossing that competes hardest after the build, 0 when none.</summary>
         public long CompetingCrossing;
         public bool CompetingMarked;

@@ -47,6 +47,11 @@ namespace FootbridgeBuilder.Tool
         public float Clearance;
         public readonly List<Entity> Chain = new List<Entity>();
         public readonly Dictionary<long, CrossingNode> CrossingNodes = new Dictionary<long, CrossingNode>();
+        /// <summary>
+        /// The road beside's crossings, kept apart: they join the ones to remove only when the planner bridges both roads, so a
+        /// node the two roads share never loses the other road's crosswalk for a bridge over one.
+        /// </summary>
+        public readonly Dictionary<long, CrossingNode> BesideCrossingNodes = new Dictionary<long, CrossingNode>();
         public readonly List<Crossing> Crossings = new List<Crossing>();
         public readonly List<Obstacle> Obstacles = new List<Obstacle>();
         public Func<float2, float> Ground;
@@ -259,7 +264,7 @@ namespace FootbridgeBuilder.Tool
             else
             {
                 // Street crossings at every node along it: a marked crosswalk at a junction, an unsafe crossing at a plain node.
-                AddCrossings(entities, snapshot, chain, snapshot.Road, snapshot.RoadWidth, snapshot.Sidewalks, path, Entity.Null, snapshot.Crossings);
+                AddCrossings(entities, snapshot.CrossingNodes, chain, snapshot.Road, snapshot.RoadWidth, snapshot.Sidewalks, path, Entity.Null, snapshot.Crossings);
                 AddHostOutlines(snapshot, snapshot.Road, snapshot.RoadWidth);
                 foreach (var (link, _) in chain) hosts.Add(link);
                 snapshot.Beside = Beside(entities, area, snapshot, chain, hit, path);
@@ -318,7 +323,7 @@ namespace FootbridgeBuilder.Tool
         }
 
         /// <summary>The street crossings at the nodes along a chain of road edges (<paramref name="skip"/> aside), listed in <paramref name="into"/>.</summary>
-        private static void AddCrossings(EntityManager entities, HoverSnapshot snapshot, List<(Entity Edge, bool Forward)> chain, float3[] line,
+        private static void AddCrossings(EntityManager entities, Dictionary<long, CrossingNode> nodes, List<(Entity Edge, bool Forward)> chain, float3[] line,
             float width, bool sidewalks, PathKind path, Entity skip, List<Crossing> into)
         {
             if (!sidewalks) return;
@@ -332,10 +337,10 @@ namespace FootbridgeBuilder.Tool
                     long id = SiteArea.Pack(node);
                     int roads = RoadEdges(entities, node, out float widest, link);
                     if (roads < 2) continue;
-                    if (!snapshot.CrossingNodes.TryGetValue(id, out var crossing))
+                    if (!nodes.TryGetValue(id, out var crossing))
                     {
                         crossing = new CrossingNode { Node = node, Position = entities.GetComponentData<Node>(node).m_Position, RoadWidth = width };
-                        snapshot.CrossingNodes[id] = crossing;
+                        nodes[id] = crossing;
                     }
                     if (!crossing.Lines.Contains(line)) crossing.Lines.Add(line);
                     var listed = into.Find(item => item.Id == id);
@@ -426,7 +431,7 @@ namespace FootbridgeBuilder.Tool
                 var line = Points(entities, chain).ToArray();
                 bool legSidewalks = HasPedestrianLanes(entities, edge);
                 var crossings = new List<Crossing>();
-                AddCrossings(entities, snapshot, chain, line, composition.m_Width, legSidewalks, path, node, crossings);
+                AddCrossings(entities, snapshot.CrossingNodes, chain, line, composition.m_Width, legSidewalks, path, node, crossings);
                 AddHostOutlines(snapshot, line, composition.m_Width);
                 foreach (var (link, _) in chain)
                 {
@@ -505,7 +510,7 @@ namespace FootbridgeBuilder.Tool
             var line = Points(entities, besideChain).ToArray();
             bool sidewalks = HasPedestrianLanes(entities, found);
             var crossings = new List<Crossing>();
-            AddCrossings(entities, snapshot, besideChain, line, foundComposition.m_Width, sidewalks, path, Entity.Null, crossings);
+            AddCrossings(entities, snapshot.BesideCrossingNodes, besideChain, line, foundComposition.m_Width, sidewalks, path, Entity.Null, crossings);
             var ids = new List<long>();
             foreach (var (link, _) in besideChain)
             {

@@ -502,21 +502,24 @@ namespace FootbridgeBuilder.Core
             }
 
             /// <summary>
-            /// Where a deck between two roads can rest on a pillar: the point on its line furthest from both roads, as long as a
-            /// pillar has room there. Null when the gap is too narrow.
+            /// Where a deck over two roads can rest on a pillar: in the gap between them, where a pillar has room clear of both,
+            /// at the point that splits the deck most evenly. Null when the gap is too narrow.
             /// </summary>
             private float2? Median(float2 from, float2 to)
             {
                 float2? best = null;
-                float bestRoom = half + 0.2f;
+                float shortest = float.MaxValue;
                 int steps = math.max(2, (int)math.ceil(math.distance(from, to) * 2f));
                 for (int step = 1; step < steps; step++)
                 {
                     float2 point = math.lerp(from, to, step / (float)steps);
-                    float room = float.MaxValue;
-                    foreach (var way in Ways())
-                        room = math.min(room, math.distance(point, way.Line.Point(way.Line.Nearest(point)).xz) - way.Width * 0.5f);
-                    if (room > bestRoom) { bestRoom = room; best = point; }
+                    // Past the bridged road's edge towards the other road, and past the other road's edge towards this one.
+                    float atMain = Road.Nearest(point), atBeside = beside.Line.Nearest(point);
+                    float pastMain = math.dot(point - Road.Point(atMain).xz, Geometry.Left(Road.Tangent(atMain))) * besideSign - main.Width * 0.5f;
+                    float pastBeside = -math.dot(point - beside.Line.Point(atBeside).xz, Geometry.Left(beside.Line.Tangent(atBeside))) * besideSign - beside.Width * 0.5f;
+                    if (math.min(pastMain, pastBeside) < half + 0.2f) continue;
+                    float longest = math.max(math.distance(from, point), math.distance(point, to));
+                    if (longest < shortest) { shortest = longest; best = point; }
                 }
                 return best;
             }
@@ -1012,6 +1015,7 @@ namespace FootbridgeBuilder.Core
                 plan.Buildable = true;
                 plan.Design = candidate.Deck.Design;
                 plan.DesignName = DesignName(candidate) + (beside != null ? " over both roads" : "");
+                plan.OverBothRoads = beside != null;
                 plan.Shift = candidate.Shift;
                 plan.DeckHeight = candidate.DeckY - Road.Point(candidate.Station).y;
                 plan.ExtraWalk = candidate.Use.ExtraWalk;
