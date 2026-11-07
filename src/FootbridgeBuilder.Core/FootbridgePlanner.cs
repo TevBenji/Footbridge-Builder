@@ -988,7 +988,12 @@ namespace FootbridgeBuilder.Core
                         if (pair == null) continue;
                         bool pairKept = Kept(pair);
                         option.Penalty = Penalty(option.Marked) + Penalty(pairKept);
-                        option.Detour = math.abs(Road.Nearest(pair.Position) - at);
+                        // A trip starts on side A (the bridged road's right) and crosses the road on that side first.
+                        float pairAt = Road.Nearest(pair.Position);
+                        bool thisRoadFirst = besideSign > 0f;
+                        option.Paired = true;
+                        option.Station = thisRoadFirst ? at : pairAt;
+                        option.FarStation = thisRoadFirst ? pairAt : at;
                         option.Marked |= pairKept;
                     }
                     crossings.Add(option);
