@@ -5,7 +5,7 @@
 // grid (idea from Grid Road Generator's HeightSnapshot), a coarser water-depth grid, nearby nets
 // as Bézier curves with widths, building lots as obstacles, and the asset info map. The result
 // (SiteContext) is immutable after capture and therefore safe to read from any thread.
-// Adapted from Placemaker (jackwrichards, GPL-3.0). Modified by TevBenji, 2026-11: the hovered road followed through its straight-on nodes, its street crossings, and the buildings, nets and water round it as outlines for the footbridge planner; a cached height grid around the cursor; a fingerprint of what stands near the bridge.
+// Adapted from Placemaker (jackwrichards, GPL-3.0). Modified by TevBenji, 2026-11: the hovered road followed through its straight-on nodes, its street crossings, and the buildings, nets and water round it as outlines for the footbridge planner; a cached height grid around the cursor; a fingerprint of what stands near the bridge; a junction or roundabout under the cursor with every leg, and the road running beside the hovered one.
 using System;
 using System.Collections.Generic;
 using Colossal.Mathematics;
@@ -22,13 +22,18 @@ using Unity.Mathematics;
 
 namespace FootbridgeBuilder.Tool
 {
-    /// <summary>A street crossing on the bridged road: its node and the road's edge ends there.</summary>
+    /// <summary>A street crossing on a bridged road: its node and the road's edge ends there.</summary>
     internal sealed class CrossingNode
     {
         public Entity Node;
         /// <summary>Where it is: building the bridge renews the road's nodes and edges, so after that it's found again by place.</summary>
         public float3 Position;
         public bool Marked;
+        /// <summary>The centre lines of the bridged roads through it: its edges are found again as the ones lying on them.</summary>
+        public readonly List<float3[]> Lines = new List<float3[]>();
+        public float RoadWidth;
+        /// <summary>The junction the bridge goes round: every road meeting there loses its crosswalk.</summary>
+        public bool AllLegs;
         public readonly List<(Entity Edge, bool AtStart)> Ends = new List<(Entity, bool)>();
     }
 
@@ -46,6 +51,10 @@ namespace FootbridgeBuilder.Tool
         public readonly List<Obstacle> Obstacles = new List<Obstacle>();
         public Func<float2, float> Ground;
         public long Fingerprint;
+        /// <summary>The road right beside the hovered one, or null.</summary>
+        public Street Beside;
+        /// <summary>The junction or roundabout under the cursor, or null.</summary>
+        public JunctionSite Junction;
     }
 
     /// <summary>
@@ -222,6 +231,9 @@ namespace FootbridgeBuilder.Tool
         /// <summary>How far the road is followed each way through its straight-on nodes.</summary>
         private const float Follow = 220f;
 
+        /// <summary>The widest gap between the hovered road and one beside it that is handed to the planner to bridge too.</summary>
+        private const float BesideGap = FootbridgePlanner.BesideGap;
+
         /// <summary>Null when the edge isn't a road on the ground the bridge can cross.</summary>
         public static HoverSnapshot Capture(EntityManager entities, SiteArea area, Entity edge, float3 hit, PathKind path, out string problem)
         {
@@ -230,69 +242,33 @@ namespace FootbridgeBuilder.Tool
             var snapshot = new HoverSnapshot { Edge = edge, RoadWidth = composition.m_Width };
             Entity prefab = entities.GetComponentData<PrefabRef>(edge).m_Prefab;
             snapshot.Sidewalks = HasPedestrianLanes(entities, edge);
-            // The game's rule for a net over a net: the upper one's underside (its height range's low end) must stay above the
-            // lower one's height range's top.
-            snapshot.Clearance = math.max(2f, composition.m_HeightRange.max - path.UnderDeck);
+            snapshot.Clearance = Clearance(composition, path);
+            // The roads the bridge goes over: outlined as the bridged road, never as obstacles.
+            var hosts = new HashSet<Entity>();
+            Entity junction = JunctionAt(entities, edge, hit.xz);
 
             // The road ahead and behind, as long as it carries straight on as the same road.
             var chain = new List<(Entity Edge, bool Forward)> { (edge, true) };
             Extend(entities, chain, prefab, forwardEnd: true);
             Extend(entities, chain, prefab, forwardEnd: false);
-            var points = new List<float3>();
-            foreach (var (link, forward) in chain)
-            {
-                snapshot.Chain.Add(link);
-                var curve = entities.GetComponentData<Curve>(link);
-                int segments = math.max(1, (int)math.ceil(curve.m_Length / 2f));
-                for (int index = points.Count == 0 ? 0 : 1; index <= segments; index++)
-                    points.Add(MathUtils.Position(curve.m_Bezier, forward ? index / (float)segments : 1f - index / (float)segments));
-            }
+            var points = Points(entities, chain);
             snapshot.Road = points.ToArray();
+            foreach (var (link, _) in chain) snapshot.Chain.Add(link);
 
-            // Street crossings at every node along it: a marked crosswalk at a junction, an unsafe crossing at a plain node.
-            for (int index = 0; index < chain.Count; index++)
+            if (junction != Entity.Null) CaptureJunction(entities, snapshot, junction, path, hosts);
+            else
             {
-                var (link, forward) = chain[index];
-                var ends = entities.GetComponentData<Edge>(link);
-                foreach (bool atStart in new[] { true, false })
-                {
-                    Entity node = atStart ? ends.m_Start : ends.m_End;
-                    long id = SiteArea.Pack(node);
-                    if (!snapshot.CrossingNodes.TryGetValue(id, out var crossing))
-                    {
-                        int roads = RoadEdges(entities, node, out float widest, link);
-                        if (roads < 2 || !snapshot.Sidewalks) continue;
-                        crossing = new CrossingNode { Node = node, Position = entities.GetComponentData<Node>(node).m_Position };
-                        snapshot.CrossingNodes[id] = crossing;
-                        snapshot.Crossings.Add(new Crossing
-                        {
-                            Id = id,
-                            Position = entities.GetComponentData<Node>(node).m_Position.xz,
-                            ClearDistance = roads >= 3 ? widest * 0.5f + path.Spec.Width + 2f : path.Spec.Width + 5f,
-                        });
-                    }
-                    crossing.Ends.Add((link, atStart));
-                    if (MarkedCrossings(entities, node, crossing.Ends, snapshot.RoadWidth) > 0)
-                    {
-                        crossing.Marked = true;
-                        snapshot.Crossings.Find(item => item.Id == id).Marked = true;
-                    }
-                }
+                // Street crossings at every node along it: a marked crosswalk at a junction, an unsafe crossing at a plain node.
+                AddCrossings(entities, snapshot, chain, snapshot.Road, snapshot.RoadWidth, snapshot.Sidewalks, path, Entity.Null, snapshot.Crossings);
+                AddHostOutlines(snapshot, snapshot.Road, snapshot.RoadWidth);
+                foreach (var (link, _) in chain) hosts.Add(link);
+                snapshot.Beside = Beside(entities, area, snapshot, chain, hit, path);
             }
 
-            // The road itself, as short outlines, so the planner keeps ramps off it.
-            float half = snapshot.RoadWidth * 0.5f;
-            for (int index = 0; index + 1 < points.Count; index++)
-            {
-                float2 a = points[index].xz, b = points[index + 1].xz;
-                float2 side = math.normalizesafe(new float2(-(b - a).y, (b - a).x)) * half;
-                snapshot.Obstacles.Add(new Obstacle { A = a + side, B = b + side, C = b - side, D = a - side, Kind = ObstacleKind.HostRoad, Surface = points[index].y });
-            }
-            var inChain = new HashSet<Entity>(snapshot.Chain);
             long fingerprint = 17;
             foreach (var (net, netPoints, width, range) in area.Nets)
             {
-                if (inChain.Contains(net)) continue;
+                if (hosts.Contains(net)) continue;
                 for (int index = 0; index + 1 < netPoints.Length; index++)
                 {
                     float2 a = netPoints[index].xz, b = netPoints[index + 1].xz;
@@ -312,12 +288,239 @@ namespace FootbridgeBuilder.Tool
                     fingerprint += (long)math.hash(new int4((int2)math.round(outline.A), (int2)math.round(outline.C))) * 31;
             }
             foreach (var water in area.Water) if (math.distance(water.A, hit.xz) < Follow + 40f) snapshot.Obstacles.Add(water);
-            foreach (var junction in area.Junctions) if (math.distance(junction.A, hit.xz) < Follow + 40f) snapshot.Obstacles.Add(junction);
+            // Every junction's square, but the one the bridge goes round: its own surface is kept clear by the ring itself.
+            long hovered = junction == Entity.Null ? 0 : SiteArea.Pack(junction);
+            foreach (var square in area.Junctions)
+                if (square.Id != hovered && math.distance(square.A, hit.xz) < Follow + 40f) snapshot.Obstacles.Add(square);
             foreach (var pillar in area.Pillars) if (math.distance(pillar.A, hit.xz) < Follow + 40f) snapshot.Obstacles.Add(pillar);
             foreach (var link in snapshot.Chain) fingerprint = fingerprint * 31 + SiteArea.Pack(link);
             snapshot.Fingerprint = fingerprint;
             snapshot.Ground = area.Ground;
             return snapshot;
+        }
+
+        // The game's rule for a net over a net: the upper one's underside (its height range's low end) must stay above the
+        // lower one's height range's top.
+        private static float Clearance(NetCompositionData composition, PathKind path) => math.max(2f, composition.m_HeightRange.max - path.UnderDeck);
+
+        /// <summary>A chain of edges as one centre line, about 2 m apart, in the chain's direction.</summary>
+        private static List<float3> Points(EntityManager entities, List<(Entity Edge, bool Forward)> chain)
+        {
+            var points = new List<float3>();
+            foreach (var (link, forward) in chain)
+            {
+                var curve = entities.GetComponentData<Curve>(link);
+                int segments = math.max(1, (int)math.ceil(curve.m_Length / 2f));
+                for (int index = points.Count == 0 ? 0 : 1; index <= segments; index++)
+                    points.Add(MathUtils.Position(curve.m_Bezier, forward ? index / (float)segments : 1f - index / (float)segments));
+            }
+            return points;
+        }
+
+        /// <summary>The street crossings at the nodes along a chain of road edges (<paramref name="skip"/> aside), listed in <paramref name="into"/>.</summary>
+        private static void AddCrossings(EntityManager entities, HoverSnapshot snapshot, List<(Entity Edge, bool Forward)> chain, float3[] line,
+            float width, bool sidewalks, PathKind path, Entity skip, List<Crossing> into)
+        {
+            if (!sidewalks) return;
+            foreach (var (link, _) in chain)
+            {
+                var ends = entities.GetComponentData<Edge>(link);
+                foreach (bool atStart in new[] { true, false })
+                {
+                    Entity node = atStart ? ends.m_Start : ends.m_End;
+                    if (node == skip) continue;
+                    long id = SiteArea.Pack(node);
+                    int roads = RoadEdges(entities, node, out float widest, link);
+                    if (roads < 2) continue;
+                    if (!snapshot.CrossingNodes.TryGetValue(id, out var crossing))
+                    {
+                        crossing = new CrossingNode { Node = node, Position = entities.GetComponentData<Node>(node).m_Position, RoadWidth = width };
+                        snapshot.CrossingNodes[id] = crossing;
+                    }
+                    if (!crossing.Lines.Contains(line)) crossing.Lines.Add(line);
+                    var listed = into.Find(item => item.Id == id);
+                    if (listed == null)
+                    {
+                        listed = new Crossing
+                        {
+                            Id = id,
+                            Position = crossing.Position.xz,
+                            ClearDistance = roads >= 3 ? widest * 0.5f + path.Spec.Width + 2f : path.Spec.Width + 5f,
+                        };
+                        into.Add(listed);
+                    }
+                    crossing.Ends.Add((link, atStart));
+                    if (MarkedCrossings(entities, node, crossing.Ends, width) > 0) crossing.Marked = true;
+                    listed.Marked = crossing.Marked;
+                }
+            }
+        }
+
+        /// <summary>A bridged road as short outlines, so the planner keeps ramps off it.</summary>
+        private static void AddHostOutlines(HoverSnapshot snapshot, float3[] points, float width)
+        {
+            float half = width * 0.5f;
+            for (int index = 0; index + 1 < points.Length; index++)
+            {
+                float2 a = points[index].xz, b = points[index + 1].xz;
+                float2 side = math.normalizesafe(new float2(-(b - a).y, (b - a).x)) * half;
+                snapshot.Obstacles.Add(new Obstacle { A = a + side, B = b + side, C = b - side, D = a - side, Kind = ObstacleKind.HostRoad, Surface = points[index].y });
+            }
+        }
+
+        /// <summary>
+        /// The junction or roundabout at one end of the edge whose own surface the point is on (the middle of a junction, or a
+        /// roundabout's ring), or Null when the point is on the road itself.
+        /// </summary>
+        public static Entity JunctionAt(EntityManager entities, Entity edge, float2 point)
+        {
+            if (!entities.HasComponent<Edge>(edge)) return Entity.Null;
+            var ends = entities.GetComponentData<Edge>(edge);
+            foreach (var node in new[] { ends.m_Start, ends.m_End })
+                if (IsJunction(entities, node) && math.distance(point, entities.GetComponentData<Node>(node).m_Position.xz) < NodeReach(entities, node))
+                    return node;
+            return Entity.Null;
+        }
+
+        /// <summary>Three roads or more meet at the node, or it is a roundabout.</summary>
+        public static bool IsJunction(EntityManager entities, Entity node) =>
+            node != Entity.Null && entities.Exists(node) && entities.HasComponent<Node>(node) && entities.HasBuffer<ConnectedEdge>(node)
+            && (entities.HasComponent<Roundabout>(node) || RoadEdges(entities, node, out _, Entity.Null) >= 3);
+
+        /// <summary>How far a junction's own surface reaches from its centre: to where its farthest road's own surface starts, or round a roundabout's ring.</summary>
+        private static float NodeReach(EntityManager entities, Entity node)
+        {
+            float reach = entities.HasComponent<Roundabout>(node) ? entities.GetComponentData<Roundabout>(node).m_Radius : 0f;
+            foreach (var connected in entities.GetBuffer<ConnectedEdge>(node, true))
+                if (entities.HasComponent<Road>(connected.m_Edge) && !entities.HasComponent<Temp>(connected.m_Edge)) reach = math.max(reach, Cut(entities, connected.m_Edge, node));
+            return reach;
+        }
+
+        /// <summary>How far from the node the edge's own surface starts: the part before that belongs to the junction.</summary>
+        private static float Cut(EntityManager entities, Entity edge, Entity node)
+        {
+            if (!entities.HasComponent<EdgeGeometry>(edge) || !entities.HasComponent<Edge>(edge) || !entities.HasComponent<Node>(node)) return 0f;
+            var geometry = entities.GetComponentData<EdgeGeometry>(edge);
+            float3 start = entities.GetComponentData<Edge>(edge).m_Start == node
+                ? (geometry.m_Start.m_Left.a + geometry.m_Start.m_Right.a) * 0.5f
+                : (geometry.m_End.m_Left.d + geometry.m_End.m_Right.d) * 0.5f;
+            return math.distance(start.xz, entities.GetComponentData<Node>(node).m_Position.xz);
+        }
+
+        /// <summary>Every road meeting at the junction, each followed outward like the hovered road, with its own crossings.</summary>
+        private static void CaptureJunction(EntityManager entities, HoverSnapshot snapshot, Entity node, PathKind path, HashSet<Entity> hosts)
+        {
+            float3 centre = entities.GetComponentData<Node>(node).m_Position;
+            var legs = new List<Street>();
+            var crossing = new CrossingNode { Node = node, Position = centre, AllLegs = true };
+            bool sidewalks = false;
+            foreach (var connected in entities.GetBuffer<ConnectedEdge>(node, true))
+            {
+                Entity edge = connected.m_Edge;
+                if (entities.HasComponent<Temp>(edge) || !IsGroundRoad(entities, edge, out var composition)) continue;
+                var ends = entities.GetComponentData<Edge>(edge);
+                bool outward = ends.m_Start == node;
+                if (!outward && ends.m_End != node) continue;
+                var chain = new List<(Entity Edge, bool Forward)> { (edge, outward) };
+                Extend(entities, chain, entities.GetComponentData<PrefabRef>(edge).m_Prefab, forwardEnd: true);
+                var line = Points(entities, chain).ToArray();
+                bool legSidewalks = HasPedestrianLanes(entities, edge);
+                var crossings = new List<Crossing>();
+                AddCrossings(entities, snapshot, chain, line, composition.m_Width, legSidewalks, path, node, crossings);
+                AddHostOutlines(snapshot, line, composition.m_Width);
+                foreach (var (link, _) in chain)
+                {
+                    hosts.Add(link);
+                    if (!snapshot.Chain.Contains(link)) snapshot.Chain.Add(link);
+                }
+                legs.Add(new Street
+                {
+                    Line = line, Width = composition.m_Width, Sidewalks = legSidewalks, Clearance = Clearance(composition, path),
+                    Clear = Cut(entities, edge, node), Crossings = crossings,
+                });
+                crossing.Lines.Add(line);
+                crossing.Ends.Add((edge, outward));
+                crossing.RoadWidth = math.max(crossing.RoadWidth, composition.m_Width);
+                sidewalks |= legSidewalks;
+            }
+            var site = new JunctionSite { Centre = centre, Roundabout = entities.HasComponent<Roundabout>(node), Reach = NodeReach(entities, node), Legs = legs };
+            if (sidewalks)
+            {
+                long id = SiteArea.Pack(node);
+                crossing.Marked = MarkedCrossings(entities, node, crossing.Ends, crossing.RoadWidth) > 0;
+                snapshot.CrossingNodes[id] = crossing;
+                site.CrossingId = id;
+                site.CrossingMarked = crossing.Marked;
+            }
+            snapshot.Junction = site;
+        }
+
+        /// <summary>
+        /// The road running beside the hovered one at the cursor (the other half of a divided highway, a frontage road), close
+        /// enough that one bridge could cross both; the planner decides. Its outline stays a plain net among the obstacles: the
+        /// planner takes it as bridged only when it bridges both.
+        /// </summary>
+        private static Street Beside(EntityManager entities, SiteArea area, HoverSnapshot snapshot, List<(Entity Edge, bool Forward)> chain, float3 hit, PathKind path)
+        {
+            var road = snapshot.Road;
+            if (road.Length < 2) return null;
+            int nearest = 0;
+            float best = float.MaxValue;
+            for (int index = 0; index + 1 < road.Length; index++)
+            {
+                float distance = math.distance(hit.xz, Closest(hit.xz, road[index].xz, road[index + 1].xz));
+                if (distance < best) { best = distance; nearest = index; }
+            }
+            float2 along = math.normalizesafe(road[nearest + 1].xz - road[nearest].xz), at = Closest(hit.xz, road[nearest].xz, road[nearest + 1].xz);
+            var inChain = new HashSet<Entity>();
+            foreach (var (link, _) in chain) inChain.Add(link);
+
+            Entity found = Entity.Null;
+            NetCompositionData foundComposition = default;
+            float closest = float.MaxValue;
+            foreach (var (net, points, width, _) in area.Nets)
+            {
+                if (inChain.Contains(net) || !IsGroundRoad(entities, net, out var composition)) continue;
+                for (int index = 0; index + 1 < points.Length; index++)
+                {
+                    float2 a = points[index].xz, b = points[index + 1].xz, other = Closest(at, a, b);
+                    float distance = math.distance(at, other);
+                    float gap = distance - (snapshot.RoadWidth + width) * 0.5f;
+                    if (distance >= closest || gap < -0.5f || gap > BesideGap) continue;
+                    // Running the same way, square across from the cursor.
+                    if (math.abs(math.dot(math.normalizesafe(b - a), along)) < math.cos(math.radians(25f)) || math.abs(math.dot(other - at, along)) > 4f) continue;
+                    closest = distance;
+                    found = net;
+                    foundComposition = composition;
+                }
+            }
+            if (found == Entity.Null) return null;
+
+            var besideChain = new List<(Entity Edge, bool Forward)> { (found, true) };
+            Entity prefab = entities.GetComponentData<PrefabRef>(found).m_Prefab;
+            Extend(entities, besideChain, prefab, forwardEnd: true);
+            Extend(entities, besideChain, prefab, forwardEnd: false);
+            var line = Points(entities, besideChain).ToArray();
+            bool sidewalks = HasPedestrianLanes(entities, found);
+            var crossings = new List<Crossing>();
+            AddCrossings(entities, snapshot, besideChain, line, foundComposition.m_Width, sidewalks, path, Entity.Null, crossings);
+            var ids = new List<long>();
+            foreach (var (link, _) in besideChain)
+            {
+                ids.Add(SiteArea.Pack(link));
+                if (!snapshot.Chain.Contains(link)) snapshot.Chain.Add(link);
+            }
+            return new Street
+            {
+                Line = line, Width = foundComposition.m_Width, Sidewalks = sidewalks, Clearance = Clearance(foundComposition, path),
+                Crossings = crossings, Ids = ids,
+            };
+        }
+
+        private static float2 Closest(float2 point, float2 from, float2 to)
+        {
+            float2 line = to - from;
+            return from + line * math.saturate(math.dot(point - from, line) / math.max(1e-6f, math.lengthsq(line)));
         }
 
         public static bool IsGroundRoad(EntityManager entities, Entity edge, out NetCompositionData composition)

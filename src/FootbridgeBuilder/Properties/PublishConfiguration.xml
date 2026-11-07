@@ -14,12 +14,14 @@ Building a footbridge by hand takes three mods and a lot of fiddling, and then t
 - **Feet that join the sidewalk**, without cutting the road or painting a new crossing
 - **Street crossings removed** near the bridge, so cims take the bridge instead of the road
 - **Buildings left standing** wherever a shape fits; otherwise the button says how many go, as the game's road tool does
+- **Whole junctions and roundabouts**: hover the middle and one bridge goes round it, a span over every road with ramps down each corner (a U at a T-junction, a ring just outside a roundabout)
+- **Two roads at once**: where another road runs right beside the one you hover, like the two halves of a divided highway, the bridge goes over both
 - **Wide roads** get the game's own arch or covered pedestrian bridge as the deck
 
 ### How to use it
 
 1. Click the **bridge** button in the bottom toolbar beside Zones, or press **Ctrl+Shift+F**.
-2. Hover a road. The bridge appears as the game's own preview, with its pillars and price. Near a junction it snaps to the street crossing.
+2. Hover a road. The bridge appears as the game's own preview, with its pillars and price. Near a junction it snaps to the street crossing; hover the middle of a junction or roundabout for a ring over every road there.
 3. A **green outline** means it fits. **Red** means nothing fits here, and the panel says why: move along the road, or turn it with **[** and **]**.
 4. Click to build. The panel says what was built: pieces, sidewalk joins, crossings removed and the cost.
 
@@ -29,7 +31,7 @@ Pick a **Design** in the panel or leave it on Auto. Crossing reach, extra cleara
 
 - The panel says how many cims will use the bridge, from the game's own pathfinding numbers. A removed crosswalk is still an unsafe crossing in the game, so some cims will run across.
 - The game has no stairs or lifts, so every design uses ramps.
-- One road at a time; junctions, roundabouts, rail and water are for later.
+- Rail and water are for later.
 - Early release: expect rough edges and tell me what you find.
 
 Built for game version **1.6.***.
@@ -48,9 +50,9 @@ Inspired by kianzarrin's Automatic Pedestrian Bridge Builder for the first game.
 	<Screenshot Value="Properties/Screenshots/05.png" />
 	<Screenshot Value="Properties/Screenshots/06.png" />
 	<Tag Value="Code Mod" />
-	<ModVersion Value="0.1.0" />
+	<ModVersion Value="0.2.0" />
 	<GameVersion Value="1.6.*" />
-	<ChangeLog Value="First release." />
+	<ChangeLog Value="- Hover the middle of a junction or roundabout: one bridge goes round it, a span over every road with ramps down each corner (a U at a T-junction, a ring just outside a roundabout).&#10;- Two roads at once: where another road runs right beside the one you hover, like the two halves of a divided highway, the bridge goes over both, on a pillar between them when that's too far for one span." />
 	<!--The forum thread whose replies show as the Discussion on the mod page-->
 	<ForumLink Value="https://forum.paradoxplaza.com/forum/threads/mod-footbridge-builder-one-click-pedestrian-bridges-discussion-feedback.1948815/" />
 	<ExternalLink Type="github" Url="https://github.com/TevBenji/Footbridge-Builder" />

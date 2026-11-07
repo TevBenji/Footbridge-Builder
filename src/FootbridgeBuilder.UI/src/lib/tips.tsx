@@ -34,7 +34,7 @@ export function ToolbarTip({ children }: { children: React.ReactElement }) {
     if (!ui.Tooltip) return children;
     return <ui.Tooltip direction="up" delayTime={250} tooltip={<div className={styles.tip}>
         <strong>Footbridge Builder</strong>
-        <div>Hover a road and click to put a footbridge over it.</div>
+        <div>Hover a road and click to put a footbridge over it, or hover the middle of a junction or roundabout for a ring over every road there.</div>
         <div className={styles.hotkey}>Ctrl+Shift+F</div>
     </div>}>{children}</ui.Tooltip>;
 }

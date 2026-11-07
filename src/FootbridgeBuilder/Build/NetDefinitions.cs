@@ -19,11 +19,12 @@ namespace FootbridgeBuilder.Build
     {
 
         /// <summary>
-        /// One definition per planned piece, all in one frame. Every piece is its own course; pieces that meet share a node
-        /// because their ends are the very same point. SubElevation is what the game's net tool sets: it makes the game price
-        /// the pieces, show the cost and charge it on Apply.
+        /// One definition per planned piece, all in one frame, each of the prefab <paramref name="prefabFor"/> gives it (a span
+        /// too long for the path gets one of the game's pedestrian bridges). Every piece is its own course; pieces that meet
+        /// share a node because their ends are the very same point. SubElevation is what the game's net tool sets: it makes the
+        /// game price the pieces, show the cost and charge it on Apply.
         /// </summary>
-        public static List<Entity> Emit(EntityManager entities, BridgePlan plan, Entity prefab, Entity deckPrefab, uint seed)
+        public static List<Entity> Emit(EntityManager entities, BridgePlan plan, System.Func<PlannedPiece, Entity> prefabFor, uint seed)
         {
             var definitions = new List<Entity>();
             var random = new Random(seed == 0 ? 1u : seed);
@@ -35,7 +36,7 @@ namespace FootbridgeBuilder.Build
                 var definition = entities.CreateEntity();
                 entities.AddComponentData(definition, new CreationDefinition
                 {
-                    m_Prefab = piece.Deck && deckPrefab != Entity.Null ? deckPrefab : prefab,
+                    m_Prefab = prefabFor(piece),
                     m_RandomSeed = random.NextInt(),
                     m_Flags = CreationFlags.SubElevation,
                 });

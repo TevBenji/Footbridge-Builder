@@ -378,8 +378,10 @@ namespace FootbridgeBuilder.Core
             }
 
             /// <summary>
-            /// How many cims take the ring: for each leg, a walk from one side's sidewalk to the other's, starting and ending
-            /// <see cref="RingTrip"/> out, against crossing at the junction itself.
+            /// How many cims take the ring, against crossing at the junction itself. For each leg, as for a bridge over one
+            /// road, three trips across it: straight over (<see cref="RingTrip"/> out either side) and twice the trip round the
+            /// junction, from the leg before it to the leg after it (<see cref="CimEstimate.AlongTrip"/> out each), which passes
+            /// the ramps on its way.
             /// </summary>
             private void EstimateRing(JunctionSite site, Ring ring)
             {
@@ -390,28 +392,39 @@ namespace FootbridgeBuilder.Core
                 for (int k = 0; k < count; k++)
                 {
                     var leg = ring.Legs[k];
-                    float up = RingAccess(ring.Corners[(k - 1 + count) % count], viaNext: true);
-                    float down = RingAccess(ring.Corners[k], viaNext: false);
-                    float walk = up + math.distance(leg.Right, leg.Left) + down - (2f * RingTrip + leg.Way.Width);
-                    share += CimEstimate.Share(walk, penalty);
-                    extra += walk;
+                    Corner before = ring.Corners[(k - 1 + count) % count], after = ring.Corners[k];
+                    float span = math.distance(leg.Right, leg.Left);
+                    float straight = RingAccess(before, toNext: true, fromNextLeg: true, RingTrip) + span
+                        + RingAccess(after, toNext: false, fromNextLeg: false, RingTrip) - (2f * RingTrip + leg.Way.Width);
+                    float round = RingAccess(before, toNext: true, fromNextLeg: false, CimEstimate.AlongTrip) + span
+                        + RingAccess(after, toNext: false, fromNextLeg: true, CimEstimate.AlongTrip) - (2f * CimEstimate.AlongTrip + leg.Way.Width);
+                    share += (CimEstimate.Share(straight, penalty) + 2f * CimEstimate.Share(round, penalty)) / 3f;
+                    extra += straight;
                 }
                 ring.Share = share / count;
                 ring.ExtraWalk = extra / count;
             }
 
-            /// <summary>From a sidewalk <see cref="RingTrip"/> out along one of a corner's legs up to that leg's end of the deck.</summary>
-            private static float RingAccess(Corner corner, bool viaNext)
+            /// <summary>
+            /// From a sidewalk <paramref name="trip"/> metres out along one of a corner's two legs (its next leg, or its first)
+            /// up to one of the corner's deck ends: by a ramp at that end, or one at the other end and along the deck between.
+            /// </summary>
+            private static float RingAccess(Corner corner, bool toNext, bool fromNextLeg, float trip)
             {
-                var same = viaNext ? corner.FromNext : corner.FromFirst;
-                var other = viaNext ? corner.FromFirst : corner.FromNext;
-                float link = corner.Link?.Length ?? 0f;
                 float best = float.MaxValue;
-                if (same != null)
-                    foreach (var walk in same.Walks) best = math.min(best, math.abs(walk.FootStation - RingTrip) + walk.Length3D);
-                // Round the corner on the ground to the other leg's ramp, then along the deck to this end.
-                if (other != null && corner.Joined)
-                    foreach (var walk in other.Walks) best = math.min(best, RingTrip + walk.FootStation + walk.Length3D + link);
+                foreach (var (side, atNext) in new[] { (corner.FromFirst, false), (corner.FromNext, true) })
+                {
+                    if (side == null) continue;
+                    // An open corner's two ends aren't joined: only a ramp at the end itself reaches it.
+                    if (atNext != toNext && !corner.Joined) continue;
+                    float deck = atNext == toNext ? 0f : corner.Link?.Length ?? 0f;
+                    foreach (var walk in side.Walks)
+                    {
+                        // A ramp along the trip's own leg is reached along its sidewalk; one along the other leg, round the corner.
+                        float ground = atNext == fromNextLeg ? math.abs(walk.FootStation - trip) : trip + walk.FootStation;
+                        best = math.min(best, ground + walk.Length3D + deck);
+                    }
+                }
                 return best == float.MaxValue ? 0f : best;
             }
 

@@ -52,7 +52,8 @@ namespace FootbridgeBuilder.Tool
         private EntityQuery temporaryEdges, temporaries, refused, replaced, builtPaths, icons, joinedRoads;
         private List<PathKind> paths = new List<PathKind>();
         private List<DeckBridge> bridges = new List<DeckBridge>();
-        private Entity deckPrefab;
+        // The prefabs the ghost on show is built from: the build check matches built edges of these.
+        private readonly HashSet<Entity> ghostPrefabs = new HashSet<Entity>();
         private SiteArea area;
         private bool areaStale = true;
         private float nextErrorLog;
@@ -343,6 +344,9 @@ namespace FootbridgeBuilder.Tool
                 point = hovering ? hit.m_HitPosition : default;
             }
             if (hovering && EntityManager.HasComponent<Temp>(edge)) edge = EntityManager.GetComponentData<Temp>(edge).m_Original;
+            // Over the middle of a junction the raycast can name the junction's node: plan from one of its roads at the same
+            // point, which puts the ring round that junction.
+            if (hovering && EntityManager.HasComponent<Node>(edge) && !EntityManager.HasComponent<Edge>(edge)) edge = RoadAt(edge);
             if (!hovering || !SiteSnapshot.IsGroundRoad(EntityManager, edge, out _))
             {
                 if (plan != null && !DevHovering && overWorld) { requestedKey = ""; DropPlan(); }
@@ -361,6 +365,15 @@ namespace FootbridgeBuilder.Tool
 
             bool click = overWorld && ((applyAction != null && applyAction.WasPressedThisFrame()) || (mouse != null && mouse.leftButton.wasPressedThisFrame));
             if (click) TryBuild(frame);
+        }
+
+        /// <summary>A road on the ground meeting at the node, or Null.</summary>
+        private Entity RoadAt(Entity node)
+        {
+            if (!EntityManager.HasBuffer<ConnectedEdge>(node)) return Entity.Null;
+            foreach (var connected in EntityManager.GetBuffer<ConnectedEdge>(node, true))
+                if (SiteSnapshot.IsGroundRoad(EntityManager, connected.m_Edge, out _)) return connected.m_Edge;
+            return Entity.Null;
         }
 
         private string KeyFor(Entity edge, float3 point) =>
@@ -457,6 +470,8 @@ namespace FootbridgeBuilder.Tool
                 Ground = snapshot.Ground,
                 Obstacles = snapshot.Obstacles,
                 Crossings = snapshot.Crossings,
+                Beside = snapshot.Beside,
+                Junction = snapshot.Junction,
             };
         }
 
@@ -598,8 +613,14 @@ namespace FootbridgeBuilder.Tool
             {
                 // Room in the terrain's road cull list before our nets come (TerrainCullGuard: the CullForCascades crash).
                 TerrainCullGuard.Reserve(terrain, emitPending.Pieces.Count);
-                deckPrefab = DeckFor(emitPending);
-                ghost.AddRange(NetDefinitions.Emit(EntityManager, emitPending, planPath.Prefab, deckPrefab, (uint)requestedKey.GetHashCode()));
+                var bridge = emitPending;
+                ghostPrefabs.Clear();
+                ghost.AddRange(NetDefinitions.Emit(EntityManager, bridge, piece =>
+                {
+                    var prefab = PrefabFor(bridge, piece);
+                    ghostPrefabs.Add(prefab);
+                    return prefab;
+                }, (uint)requestedKey.GetHashCode()));
                 emitPending = null;
                 emittedFrame = frame;
                 lastCount = -1;
@@ -612,18 +633,18 @@ namespace FootbridgeBuilder.Tool
             return false;
         }
 
-        /// <summary>The pedestrian bridge for a deck longer than the path can span (the shortest that reaches); none otherwise.</summary>
-        private Entity DeckFor(BridgePlan bridge)
+        /// <summary>
+        /// The path itself, or for a span longer than the path can carry, the game's pedestrian bridge that reaches it (the
+        /// shortest). Each span of a ring or a pair of roads gets its own.
+        /// </summary>
+        private Entity PrefabFor(BridgePlan bridge, PlannedPiece piece)
         {
-            foreach (var piece in bridge.Pieces)
-            {
-                if (!piece.Deck) continue;
-                float span = math.distance(bridge.Position(piece.Start).xz, bridge.Position(piece.End).xz);
-                if (span <= planPath.Span - 0.5f) return Entity.Null;
-                foreach (var candidate in bridges)
-                    if (span >= candidate.Shortest && span <= candidate.Longest - 0.5f) return candidate.Prefab;
-            }
-            return Entity.Null;
+            if (!piece.Deck) return planPath.Prefab;
+            float span = math.distance(bridge.Position(piece.Start).xz, bridge.Position(piece.End).xz);
+            if (span <= planPath.Span - 0.5f) return planPath.Prefab;
+            foreach (var candidate in bridges)
+                if (span >= candidate.Shortest && span <= candidate.Longest - 0.5f) return candidate.Prefab;
+            return planPath.Prefab;
         }
 
         // The game has turned the definitions into temporaries once their number stops changing.
@@ -762,7 +783,7 @@ namespace FootbridgeBuilder.Tool
                 foreach (var edge in edges)
                 {
                     var prefab = EntityManager.GetComponentData<PrefabRef>(edge).m_Prefab;
-                    if (prefab != planPath.Prefab && (deckPrefab == Entity.Null || prefab != deckPrefab)) continue;
+                    if (prefab != planPath.Prefab && !ghostPrefabs.Contains(prefab)) continue;
                     var ends = EntityManager.GetComponentData<Edge>(edge);
                     if (!EntityManager.HasComponent<Node>(ends.m_Start) || !EntityManager.HasComponent<Node>(ends.m_End)) continue;
                     float3 a = EntityManager.GetComponentData<Node>(ends.m_Start).m_Position, b = EntityManager.GetComponentData<Node>(ends.m_End).m_Position;
@@ -881,23 +902,27 @@ namespace FootbridgeBuilder.Tool
             {
                 var edge = connected.m_Edge;
                 if (!EntityManager.HasComponent<Road>(edge) || EntityManager.HasComponent<Temp>(edge) || !EntityManager.HasComponent<Curve>(edge)) continue;
-                // Our road's legs, not the side street's: the edge's middle lies on our road's line, and so does its far node. A
-                // side street whose first piece is short has its middle near our line too, but never its far node.
-                float3 middle = MathUtils.Position(EntityManager.GetComponentData<Curve>(edge).m_Bezier, 0.5f);
-                if (DistanceToRoad(middle.xz) > planSnapshot.RoadWidth * 0.5f) continue;
                 var edgeEnds = EntityManager.GetComponentData<Edge>(edge);
-                Entity far = edgeEnds.m_Start == node ? edgeEnds.m_End : edgeEnds.m_Start;
-                if (!EntityManager.HasComponent<Node>(far) || DistanceToRoad(EntityManager.GetComponentData<Node>(far).m_Position.xz) > 1f) continue;
+                // The junction a ring goes round: every road there loses its crosswalk.
+                if (!crossing.AllLegs)
+                {
+                    // Our roads' legs, not the side street's: the edge's middle lies on a bridged road's line, and so does its
+                    // far node. A side street whose first piece is short has its middle near our line too, but never its far node.
+                    float3 middle = MathUtils.Position(EntityManager.GetComponentData<Curve>(edge).m_Bezier, 0.5f);
+                    if (DistanceToLines(crossing, middle.xz) > crossing.RoadWidth * 0.5f) continue;
+                    Entity far = edgeEnds.m_Start == node ? edgeEnds.m_End : edgeEnds.m_Start;
+                    if (!EntityManager.HasComponent<Node>(far) || DistanceToLines(crossing, EntityManager.GetComponentData<Node>(far).m_Position.xz) > 1f) continue;
+                }
                 ends.Add((edge, edgeEnds.m_Start == node));
             }
             return (node, ends);
         }
 
-        private float DistanceToRoad(float2 point)
+        private static float DistanceToLines(CrossingNode crossing, float2 point)
         {
             float best = float.MaxValue;
-            var road = planSnapshot.Road;
-            for (int index = 0; index + 1 < road.Length; index++) best = math.min(best, Distance(point, road[index].xz, road[index + 1].xz));
+            foreach (var line in crossing.Lines)
+                for (int index = 0; index + 1 < line.Length; index++) best = math.min(best, Distance(point, line[index].xz, line[index + 1].xz));
             return best;
         }
 
@@ -922,7 +947,7 @@ namespace FootbridgeBuilder.Tool
                 if (!planSnapshot.CrossingNodes.TryGetValue(id, out var crossing) || !crossing.Marked) continue;
                 wanted++;
                 var (node, fresh) = Fresh(crossing);
-                if (node != Entity.Null && SiteSnapshot.MarkedCrossings(EntityManager, node, fresh, planSnapshot.RoadWidth) == 0) removed++;
+                if (node != Entity.Null && SiteSnapshot.MarkedCrossings(EntityManager, node, fresh, crossing.RoadWidth) == 0) removed++;
             }
             LastCrossingsWanted = wanted;
             LastCrossingsRemoved = removed;
