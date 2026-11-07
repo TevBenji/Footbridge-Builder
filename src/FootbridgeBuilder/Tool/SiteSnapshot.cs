@@ -478,9 +478,10 @@ namespace FootbridgeBuilder.Tool
             Entity found = Entity.Null;
             NetCompositionData foundComposition = default;
             float closest = float.MaxValue;
+            // Every hover runs this over every net nearby: the plain geometry first, the net's components only for a match.
             foreach (var (net, points, width, _) in area.Nets)
             {
-                if (inChain.Contains(net) || !IsGroundRoad(entities, net, out var composition)) continue;
+                if (inChain.Contains(net)) continue;
                 for (int index = 0; index + 1 < points.Length; index++)
                 {
                     float2 a = points[index].xz, b = points[index + 1].xz, other = Closest(at, a, b);
@@ -489,6 +490,7 @@ namespace FootbridgeBuilder.Tool
                     if (distance >= closest || gap < -0.5f || gap > BesideGap) continue;
                     // Running the same way, square across from the cursor.
                     if (math.abs(math.dot(math.normalizesafe(b - a), along)) < math.cos(math.radians(25f)) || math.abs(math.dot(other - at, along)) > 4f) continue;
+                    if (!IsGroundRoad(entities, net, out var composition)) break;
                     closest = distance;
                     found = net;
                     foundComposition = composition;
