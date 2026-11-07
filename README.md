@@ -3,7 +3,7 @@
 <img align="right" src="src/FootbridgeBuilder/Properties/Thumbnail.png" alt="Footbridge Builder" width="260">
 
 <a href="https://mods.paradoxplaza.com/authors/TevBenji/cities_skylines_2"><img alt="Paradox Mods: Footbridge Builder" src="https://img.shields.io/badge/Paradox%20Mods-Footbridge%20Builder-2ea44f"></a>
-<img alt="Version" src="https://img.shields.io/badge/version-0.2.0-1f6feb">
+<img alt="Version" src="https://img.shields.io/badge/version-0.3.0-1f6feb">
 <img alt="Game version" src="https://img.shields.io/badge/Cities%3A%20Skylines%20II-1.6-0e7490">
 <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0-c2410c"></a>
 
@@ -67,7 +67,9 @@ In the game:
   frontage road) with nothing built between them, the bridge goes over both. When that's too far for one span, the deck
   rests on a pillar between the two roads.
 - **Wide roads.** A footpath spans about 36 m. Over a wider road the game's own arch or covered pedestrian bridge
-  carries the deck, up to about 40 m. (The cable-stayed one is left out: its tower would stand in the traffic.)
+  carries the deck, up to about 44 m. Wider still, a divided road's median takes a pillar, so even the 40 m XL road gets
+  one bridge, and a ring at its junctions. Pillars stand only where the game allows one: in a median or between two
+  roads, never in the lanes. (The cable-stayed bridge is left out: the game refuses its tower even on a median.)
 
 <table>
 <tr>
@@ -188,6 +190,7 @@ own height. The game draws the preview, prices it, builds it on your click, and 
 ## Known limitations
 
 - Tunnels, rail and water are planned for later. A raised road meeting at a junction is left out of its ring.
+- A road wider than about 44 m with no median can't be crossed in one go: the panel says so.
 - The game has the last word. If it refuses part of a bridge the planner thought would fit, the outline turns red, the
   panel names the game's reason, and nothing is built.
 - The game has no walkable stairs or lifts, so every design uses ramps.
