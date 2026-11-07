@@ -48,9 +48,11 @@ namespace FootbridgeBuilder.Core
 
         /// <summary>
         /// Averages three trips: straight over at the bridge, and along the road each way. <paramref name="bridgeWalk"/> gives
-        /// the walk over the bridge from a sidewalk station on one side to one on the other.
+        /// the walk over the bridge from a sidewalk station on one side to one on the other. <paramref name="crossingsOnTheWay"/>
+        /// is how many crossings a walk at street level pays (two over a pair of roads).
         /// </summary>
-        public static Result Estimate(float station, float roadWidth, IReadOnlyList<StreetOption> options, Func<float, float, float> bridgeWalk)
+        public static Result Estimate(float station, float roadWidth, IReadOnlyList<StreetOption> options, Func<float, float, float> bridgeWalk,
+            float crossingsOnTheWay = 1f)
         {
             var result = new Result { Share = 0f };
             var trips = new[] { (station, station), (station - AlongTrip, station + AlongTrip), (station + AlongTrip, station - AlongTrip) };
@@ -66,7 +68,7 @@ namespace FootbridgeBuilder.Core
                 {
                     float street = math.abs(option.Station - from) + roadWidth + math.abs(option.Station - to);
                     shortestStreet = math.min(shortestStreet, street);
-                    float optionShare = Share(bridge - street, option.Marked ? MarkedPenalty : UnsafePenalty);
+                    float optionShare = Share(bridge - street, (option.Marked ? MarkedPenalty : UnsafePenalty) * crossingsOnTheWay);
                     if (optionShare < share || (competing == 0 && optionShare <= share))
                     {
                         share = optionShare;
