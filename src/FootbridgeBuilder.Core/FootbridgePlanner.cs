@@ -559,6 +559,9 @@ namespace FootbridgeBuilder.Core
             private bool PillarAllowed(float2 point, float deckY)
             {
                 if (PillarProblem(point, deckY).Length > 0) return false;
+                // The same height limits as a landing: the deck is level, so a dip or a rise under a pillar can break them.
+                float height = deckY - Request.Ground(point);
+                if (height < 1f || height > highest) return false;
                 float room = half + 0.2f;
                 foreach (var (obstacle, centre, radius) in obstacles.Near(point))
                 {
@@ -569,8 +572,11 @@ namespace FootbridgeBuilder.Core
                 foreach (var way in pillarWays)
                 {
                     float at = way.Line.Nearest(point);
-                    float offset = math.dot(point - way.Line.Point(at).xz, Geometry.Left(way.Line.Tangent(at)));
-                    if (math.abs(offset) >= way.Width * 0.5f + room) continue;
+                    float2 onLine = way.Line.Point(at).xz;
+                    // The distance to the road as it is, not just across it: a junction's leg ends there, and the leg
+                    // opposite a wide road would otherwise reach over that road's median.
+                    if (math.distance(point, onLine) >= way.Width * 0.5f + room) continue;
+                    float offset = math.dot(point - onLine, Geometry.Left(way.Line.Tangent(at)));
                     bool onMedian = false;
                     foreach (var band in way.Bands) onMedian |= offset >= band.x + 0.3f && offset <= band.y - 0.3f;
                     if (!onMedian) return false;
