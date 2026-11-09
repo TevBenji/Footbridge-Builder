@@ -33,6 +33,10 @@ namespace FootbridgeBuilder.Settings
         [SettingsUIHidden] public bool RemoveCrossings { get; set; }
         [SettingsUIHidden] public int CrossingReach { get; set; }
         [SettingsUIHidden] public float ExtraClearance { get; set; }
+        // The panel's top-left corner as a fraction of the screen, so a new resolution can't lose it; below 0 is its usual place.
+        [SettingsUIHidden] public float PanelX { get; set; }
+        [SettingsUIHidden] public float PanelY { get; set; }
+        [SettingsUIHidden] public bool PanelCollapsed { get; set; }
 
         public override void SetDefaults()
         {
@@ -41,6 +45,8 @@ namespace FootbridgeBuilder.Settings
             RemoveCrossings = true;
             CrossingReach = 60;
             ExtraClearance = 0.5f;
+            PanelX = PanelY = -1f;
+            PanelCollapsed = false;
         }
 
         /// <summary>

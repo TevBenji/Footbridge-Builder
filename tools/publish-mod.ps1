@@ -10,8 +10,7 @@
 param(
     [switch]$Update,
     [switch]$PageOnly,
-    [switch]$DryRun,
-    [string]$Email
+    [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -35,8 +34,13 @@ if (-not $DryRun) {
 }
 
 Write-Host '== Building Release'
+# Without node_modules the build skips the panel bundle with only a warning, so an old one could ship with new assemblies:
+# clear it first and insist the build made it again.
+$bundle = 'FootbridgeBuilder.mjs', 'FootbridgeBuilder.css' | ForEach-Object { Join-Path $release $_ }
+Remove-Item $bundle -ErrorAction SilentlyContinue
 dotnet build (Join-Path $root 'FootbridgeBuilder.sln') -c Release -nologo -v quiet
 if ($LASTEXITCODE -ne 0) { throw 'The build failed.' }
+if ($bundle | Where-Object { -not (Test-Path $_) }) { throw 'The panel bundle was not built: run npm ci in src\FootbridgeBuilder.UI, then publish again.' }
 
 # The test runner builds into bin\Dev; this catches it if it ever reaches Release.
 if ([IO.File]::ReadAllText((Join-Path $release 'FootbridgeBuilder.dll'), [Text.Encoding]::Latin1).Contains('DevHarness')) { throw 'The Release build contains the dev harness.' }
@@ -79,23 +83,21 @@ if ($visibility -ne 'PUBLIC') {
 Write-Host '== Uploading to Paradox Mods'
 # The publisher targets .NET 6; a newer runtime runs it.
 $env:DOTNET_ROLL_FORWARD = 'Major'
+# Only the login the game has saved: the publisher takes a typed password only on its command line, where other programs
+# can read it, so this script never passes one.
 $arguments = @($command, $page, '-c', $content, '-v')
-# Asked at a hidden prompt, so the password never lands in the shell's history.
-if ($Email) {
-    $secure = Read-Host -AsSecureString "Paradox password for $Email"
-    $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-    $arguments += @('--noAutoLogin', '-e', $Email, '-p', $password)
-}
 Push-Location $project  # the page file names its pictures relative to the project
 try { & $publisher @arguments 2>&1 | Tee-Object -Variable log } finally { Pop-Location }
-if ($LASTEXITCODE -ne 0) { throw 'The upload failed: the lines above say why (if it could not log in, add -Email and type the password when asked).' }
+if ($LASTEXITCODE -ne 0) { throw 'The upload failed: the lines above say why. If it could not log in, start the game, sign in to Paradox there, and try again.' }
 
 $found = [regex]::Match(($log -join "`n"), 'Id\s*=\s*(\d+)')
 if ($command -eq 'Publish' -and $found.Success) {
     $id = $found.Groups[1].Value
     (Get-Content $page -Raw) -replace '<ModId Value="" />', "<ModId Value=`"$id`" />" | Set-Content $page -NoNewline
     git -C $root commit -q -m "Paradox Mods: mod id $id" -- $page
+    if ($LASTEXITCODE -ne 0) { throw "The upload worked (mod ${id}), but committing its id failed: put $id in the page file's ModId and commit it before publishing again." }
     git -C $root push origin master
+    if ($LASTEXITCODE -ne 0) { throw "The upload worked (mod ${id}), but pushing its id to GitHub failed: push master before publishing from anywhere else." }
     Write-Host "== Published as mod ${id}: https://mods.paradoxplaza.com/mods/$id/Windows"
 }
 Write-Host '== Done'

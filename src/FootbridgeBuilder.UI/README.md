@@ -38,19 +38,24 @@ Group: `FootbridgeBuilder`. Value: `state`, a `ValueBinding<string>` carrying JS
 | `buildingsReplaced` | number | Zoned buildings the game will replace (its own warnings on the ghost) |
 | `refused` | number | Temporaries the game marks with an error |
 | `turn` | number | Degrees, -30 to 30 |
+| `pinned` | boolean | The bridge is held in place for the panel; only then can it be built |
+| `discord` | boolean | A Discord link is set, so its buttons show |
 | `paths` | `{name, label}[]` | Footpaths that can be raised |
-| `settings` | object | `design`, `path`, `removeCrossings`, `reach` (20-150), `extraClearance` (0.5-3) |
+| `settings` | object | `design`, `path`, `removeCrossings`, `reach` (20-150), `extraClearance` (0.5-3), `panelX` and `panelY` (the panel's top-left corner as a fraction of the screen, below 0 for its usual place), `panelCollapsed` |
 
 | Trigger | Argument | Does |
 |---|---|---|
 | `toggleTool` | none | Opens or closes the tool |
 | `close` | none | Closes the tool |
-| `build` | none | Builds the bridge on show |
+| `build` | none | Builds the pinned bridge; does nothing without a pin |
 | `setDesign` | string | `Auto`, `YRamps`, `ZRamps`, `Switchback`, `SpiralRamp`, `DiagonalSpan` or `SnakeDeck` |
 | `setPath` | string | A path's prefab name from `paths` |
 | `setRemoveCrossings` | boolean | Remove crossings in reach |
 | `setReach` | number | Clamped to 20-150 m, saved |
 | `setExtraClearance` | number | Clamped to 0.5-3 m in 0.25 steps, saved |
 | `setTurn` | number | Clamped to -30..30 in 5 degree steps, not saved |
+| `setPanelPlace` | number, number | The panel's corner as fractions of the screen, clamped to 0-1, saved; below 0 puts it back in its usual place. Never re-plans |
+| `setPanelCollapsed` | boolean | Folds the panel to its header, saved. Never re-plans |
+| `openLink` | string | `bug` or `discord`: C# maps the key to a fixed address and opens it. An unknown key does nothing |
 
 Numeric triggers clamp in C#, save with `ApplyAndSave()` and then tell the tool, which plans again.

@@ -2,10 +2,10 @@
 	<!--Empty for the first upload. The publisher prints "Mod published with Id=NNNNNN": it goes here, or the next upload makes a second listing-->
 	<ModId Value="166416" />
 	<DisplayName Value="Footbridge Builder" />
-	<ShortDescription Value="Hover a road and click: a pedestrian bridge at the lowest height the game allows, with ramps that fit and feet that join the sidewalk. A green outline when it fits; no other mods needed." />
+	<ShortDescription Value="Hover a road and click to pin a pedestrian bridge at the lowest height the game allows, adjust it in the panel, then build. Ramps that fit, feet that join the sidewalk, no other mods." />
 	<!--Every upload sends exactly this page: change it here, not on the website, or the next upload overwrites the website-->
 	<LongDescription>
-Building a footbridge by hand takes three mods and a lot of fiddling, and then the cims cross at street level anyway. Footbridge Builder does it for you: hover a road and the bridge appears, as low as the game allows, with ramps that fit beside the road and feet that join the sidewalk. Click, and it's built. No other mods needed.
+Building a footbridge by hand takes three mods and a lot of fiddling, and then the cims cross at street level anyway. Footbridge Builder does it for you: hover a road and the bridge appears, as low as the game allows, with ramps that fit beside the road and feet that join the sidewalk. Click to pin it, adjust it in the panel, and press Build. No other mods needed.
 
 ### What it builds
 
@@ -23,9 +23,10 @@ Building a footbridge by hand takes three mods and a lot of fiddling, and then t
 1. Click the **bridge** button in the bottom toolbar beside Zones, or press **Ctrl+Shift+F**.
 2. Hover a road. The bridge appears as the game's own preview, with its pillars and price. Near a junction it snaps to the street crossing; hover the middle of a junction or roundabout for a ring over every road there.
 3. A **green outline** means it fits. **Red** means nothing fits here, and the panel says why: move along the road, or turn it with **[** and **]**.
-4. Click to build. The panel says what was built: pieces, sidewalk joins, crossings removed and the cost.
+4. **Click to pin the bridge.** It stays put while you go to the panel. Change the design or any setting and it is planned again right there, green or red. A red bridge can be pinned too, so you can try other designs at that spot. Click another road to move the pin; right-click or **Esc** unpins it.
+5. Press the green **Build** button in the panel. Clicking the map never builds. The panel says what was built: pieces, sidewalk joins, crossings removed and the cost.
 
-Pick a **Design** in the panel or leave it on Auto. Crossing reach, extra clearance and the turn are under **More settings**. **Esc** clears the bridge, and again closes the tool.
+Pick a **Design** in the panel or leave it on Auto. Crossing reach, extra clearance and the turn are under **More settings**. **Esc** clears the bridge, and again closes the tool. Drag the panel's header to move it, double-click the header to put it back, or use the arrow in the header to fold it away.
 
 ### Good to know
 
@@ -35,6 +36,10 @@ Pick a **Design** in the panel or leave it on Auto. Crossing reach, extra cleara
 - Early release: expect rough edges and tell me what you find.
 
 Built for game version **1.6.***.
+
+### Found a bug?
+
+Press **Report a bug** at the bottom of the panel, or open an issue at https://github.com/TevBenji/Footbridge-Builder/issues, with a screenshot and your FootbridgeBuilder.log. Or tell me on Discord: https://discord.com/channels/263634513861541888/1568265920902594560
 
 ### Credits
 
@@ -50,9 +55,9 @@ Inspired by kianzarrin's Automatic Pedestrian Bridge Builder for the first game.
 	<Screenshot Value="Properties/Screenshots/05.png" />
 	<Screenshot Value="Properties/Screenshots/06.png" />
 	<Tag Value="Code Mod" />
-	<ModVersion Value="0.3.0" />
+	<ModVersion Value="0.4.0" />
 	<GameVersion Value="1.6.*" />
-	<ChangeLog Value="- Wide divided roads: a deck too long for one span rests on a pillar in the road's median, so even the 8-lane XL road gets one bridge, and a ring at its junctions. Pillars stand only where the game allows one: in a median or between two roads, never in the lanes." />
+	<ChangeLog Value="- Clicking a road no longer builds straight away: the click pins the bridge, you adjust it in the panel, and the green Build button builds it. Right-click or Esc unpins.&#10;- A picture for each design in the design list.&#10;- Drag the panel's header to move the panel; double-click the header to put it back.&#10;- The arrow in the header folds the panel away; the tool keeps working.&#10;- Report a bug and Discord buttons in the panel." />
 	<!--The forum thread whose replies show as the Discussion on the mod page-->
 	<ForumLink Value="https://forum.paradoxplaza.com/forum/threads/mod-footbridge-builder-one-click-pedestrian-bridges-discussion-feedback.1948815/" />
 	<ExternalLink Type="github" Url="https://github.com/TevBenji/Footbridge-Builder" />

@@ -15,7 +15,13 @@ export interface Settings {
     reach: number;
     /** 0.5-3 m over the road's and deck's own heights: the game refused decks much lower. */
     extraClearance: number;
+    /** The panel's top-left corner as a fraction of the screen; below 0 is its usual place. */
+    panelX: number;
+    panelY: number;
+    panelCollapsed: boolean;
 }
+
+export interface PanelPlace { x: number; y: number; }
 
 export interface ToolState {
     stage: ToolStage;
@@ -38,6 +44,10 @@ export interface ToolState {
     buildingsReplaced: number;
     refused: number;
     turn: number;
+    /** The bridge is held in place for the panel; only then can it be built. */
+    pinned: boolean;
+    /** A Discord link is set, so its buttons show. */
+    discord: boolean;
     paths: PathOption[];
     settings: Settings;
 }
@@ -79,6 +89,8 @@ export function readState(raw: unknown): ToolState {
         buildingsReplaced: whole(state.buildingsReplaced, 0, 0, 10000),
         refused: whole(state.refused, 0, 0, 10000),
         turn: number(state.turn, 0, -30, 30),
+        pinned: flag(state.pinned, false),
+        discord: flag(state.discord, false),
         paths,
         settings: {
             design: DESIGNS.includes(settings.design as Design) ? settings.design as Design : "Auto",
@@ -86,6 +98,9 @@ export function readState(raw: unknown): ToolState {
             removeCrossings: flag(settings.removeCrossings, true),
             reach: whole(settings.reach, 60, 20, 150),
             extraClearance: number(settings.extraClearance, 0.5, 0.5, 3),
+            panelX: number(settings.panelX, -1, -1, 1),
+            panelY: number(settings.panelY, -1, -1, 1),
+            panelCollapsed: flag(settings.panelCollapsed, false),
         },
     };
 }
@@ -109,7 +124,30 @@ export function buildLabel(state: ToolState): string {
 }
 
 export function canBuild(state: ToolState): boolean {
-    return state.stage === "Planned" && state.buildable && state.refused === 0 && state.cost >= 0;
+    return state.pinned && state.stage === "Planned" && state.buildable && state.refused === 0 && state.cost >= 0;
+}
+
+/** The small print under the status: what the mouse and keys do right now. */
+export function hintLine(state: ToolState): string {
+    if (state.pinned) return `${state.stage === "Planned" && state.buildable ? "Change it here, then press Build" : "Try another design here"} · Right-click or Esc to unpin`;
+    return state.stage === "Planned" ? "Click to pin it here · [ ] to turn · Esc to clear" : "Esc to close";
+}
+
+/** The saved place, or null for the usual one. */
+export function panelPlace(settings: Settings): PanelPlace | null {
+    return settings.panelX < 0 || settings.panelY < 0 ? null : { x: settings.panelX, y: settings.panelY };
+}
+
+const within = (value: number, size: number, screen: number) => Math.max(0, Math.min(Math.max(0, screen - size), value));
+
+/** The panel's top-left corner in pixels for a saved place, with all of the panel on screen. */
+export function placeOnScreen(place: PanelPlace, width: number, height: number, screenWidth: number, screenHeight: number) {
+    return { left: within(place.x * screenWidth, width, screenWidth), top: within(place.y * screenHeight, height, screenHeight) };
+}
+
+/** The place to save for a panel dragged to this corner, kept fully on screen. */
+export function placeFromDrag(left: number, top: number, width: number, height: number, screenWidth: number, screenHeight: number): PanelPlace {
+    return { x: within(left, width, screenWidth) / Math.max(1, screenWidth), y: within(top, height, screenHeight) / Math.max(1, screenHeight) };
 }
 
 export function thousands(value: number): string {
