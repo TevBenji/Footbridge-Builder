@@ -77,8 +77,11 @@ namespace FootbridgeBuilder.Tool
         private float3 requestedPoint;
 
         // A left-click pins the bridge. Only the panel's Build button builds it, so a click meant to open the settings can't
-        // spend the city's money. Clicks are latched because input waits on the ghost's own frames.
-        private bool pinned, leftClicked, rightClicked;
+        // spend the city's money. Clicks are latched because input waits on the ghost's own frames; a left-click keeps where it
+        // landed, since the pointer is on its way to the panel by the time it's handled.
+        private bool pinned, leftClicked, rightClicked, clickedRoad;
+        private Entity clickedEdge;
+        private float3 clickedPoint;
         private readonly RightClickGesture rightClick = new RightClickGesture();
 
         // The ghost on show.
@@ -323,7 +326,11 @@ namespace FootbridgeBuilder.Tool
         {
             var mouse = Mouse.current;
             bool overWorld = input.controlOverWorld;
-            leftClicked |= overWorld && ((applyAction != null && applyAction.WasPressedThisFrame()) || (mouse != null && mouse.leftButton.wasPressedThisFrame));
+            if (overWorld && ((applyAction != null && applyAction.WasPressedThisFrame()) || (mouse != null && mouse.leftButton.wasPressedThisFrame)))
+            {
+                leftClicked = true;
+                clickedRoad = RoadUnderPointer(overWorld, out clickedEdge, out clickedPoint);
+            }
             if (mouse == null) return;
             // Dragging with the right button turns the camera: only a quick click counts.
             rightClicked |= rightClick.Update(overWorld && mouse.rightButton.wasPressedThisFrame, mouse.rightButton.isPressed, mouse.delta.ReadValue(),
@@ -376,16 +383,13 @@ namespace FootbridgeBuilder.Tool
             if (BuildRequested)
             {
                 BuildRequested = false;
-                TryBuild(frame);
+                if (pinned) TryBuild(frame);
                 return;
             }
 
-            if (pinned)
-            {
-                // Another road or another spot: the pin moves there. A click never builds, even on the pinned bridge.
-                if (click && onRoad) PinAt(edge, point);
-                return;
-            }
+            // Another road or another spot: the pin moves there. A click never builds, even on the pinned bridge.
+            if (click && clickedRoad) { PinAt(clickedEdge, clickedPoint); return; }
+            if (pinned) return;
             if (!onRoad)
             {
                 if (plan != null && !DevHovering && overWorld) { requestedKey = ""; DropPlan(); }
@@ -401,8 +405,6 @@ namespace FootbridgeBuilder.Tool
             string key = KeyFor(edge, point);
             if (key != requestedKey && key != suppressedKey && UnityEngine.Time.realtimeSinceStartup - requestedAt > 0.12f)
                 RequestPlan(edge, point, key);
-
-            if (click) PinAt(edge, point);
         }
 
         private bool RoadUnderPointer(bool overWorld, out Entity edge, out float3 point)
@@ -436,7 +438,7 @@ namespace FootbridgeBuilder.Tool
         private void ClearPin()
         {
             pinned = State.Pinned = false;
-            leftClicked = rightClicked = false;
+            leftClicked = rightClicked = BuildRequested = false;
             rightClick.Reset();
             Touch();
         }

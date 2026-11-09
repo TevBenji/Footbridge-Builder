@@ -169,6 +169,13 @@ function usePanelPlace(saved: PanelPlace | null, closed: boolean) {
     const [place, setPlace] = useState(saved);
     useEffect(() => setPlace(saved), [saved?.x, saved?.y]);
     useEffect(() => () => stopDragging.current?.(), [closed]);
+    // A new resolution: render again, so the check below keeps the panel on the new screen.
+    const [, setResized] = useState(0);
+    useEffect(() => {
+        const resized = () => setResized(count => count + 1);
+        window.addEventListener("resize", resized);
+        return () => window.removeEventListener("resize", resized);
+    }, []);
     useLayoutEffect(() => {
         if (!panel.current || !dock.current) return;
         const home = dock.current.getBoundingClientRect();
