@@ -20,6 +20,9 @@ namespace FootbridgeBuilder.Panel
     public sealed partial class PanelSystem : UISystemBase
     {
         private const string Group = "FootbridgeBuilder";
+        private const string BugLink = "https://github.com/TevBenji/Footbridge-Builder/issues/new";
+        // Empty hides the panel's Discord buttons.
+        private const string DiscordLink = "https://discord.com/channels/263634513861541888/1568265920902594560";
         private FootbridgeToolSystem _tool;
         private ValueBinding<string> _state;
         private bool _published, _updateFailed;
@@ -56,6 +59,20 @@ namespace FootbridgeBuilder.Panel
                 {
                     if (!double.IsNaN(value) && !double.IsInfinity(value)) _tool.SetTurn((float)Math.Max(-30, Math.Min(30, value)));
                 });
+                AddBinding(new TriggerBinding<double, double>(Group, "setPanelPlace", (x, y) => Safe("setPanelPlace", () => SavePanel(settings =>
+                {
+                    if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y)) return;
+                    bool usual = x < 0 || y < 0;
+                    settings.PanelX = usual ? -1f : (float)Math.Min(1, x);
+                    settings.PanelY = usual ? -1f : (float)Math.Min(1, y);
+                }))));
+                Trigger<bool>("setPanelCollapsed", value => SavePanel(settings => settings.PanelCollapsed = value));
+                // A key, never an address, so the panel can only open these two.
+                Trigger<string>("openLink", key =>
+                {
+                    string link = key == "bug" ? BugLink : key == "discord" ? DiscordLink : "";
+                    if (link.Length > 0) UnityEngine.Application.OpenURL(link);
+                });
             }
             catch (Exception exception)
             {
@@ -91,6 +108,16 @@ namespace FootbridgeBuilder.Panel
             // Replanning still happens if saving fails, so the panel never leaves a stale bridge buildable.
             try { settings.ApplyAndSave(); }
             finally { _tool.SettingsChanged(); }
+        }
+
+        // Moving or folding the panel doesn't change the bridge, so nothing is planned again.
+        private void SavePanel(Action<FootbridgeSettings> write)
+        {
+            var settings = Mod.Settings;
+            if (settings == null) return;
+            write(settings);
+            try { settings.ApplyAndSave(); }
+            finally { _tool.State.Version++; }
         }
 
         [Preserve]
@@ -135,6 +162,8 @@ namespace FootbridgeBuilder.Panel
             json.Append(",\"buildingsReplaced\":").Append(state.BuildingsReplaced.ToString(CultureInfo.InvariantCulture));
             json.Append(",\"refused\":").Append(state.Refused.ToString(CultureInfo.InvariantCulture));
             json.Append(",\"turn\":").Append(Number(state.Turn));
+            json.Append(",\"pinned\":").Append(state.Pinned ? "true" : "false");
+            json.Append(",\"discord\":").Append(DiscordLink.Length > 0 ? "true" : "false");
             json.Append(",\"paths\":[");
             for (int index = 0; index < state.PathNames.Length; index++)
             {
@@ -148,6 +177,9 @@ namespace FootbridgeBuilder.Panel
             json.Append(",\"removeCrossings\":").Append(settings == null || settings.RemoveCrossings ? "true" : "false");
             json.Append(",\"reach\":").Append(Number(settings?.CrossingReach ?? 60));
             json.Append(",\"extraClearance\":").Append(Number(settings?.ExtraClearance ?? 0.5f));
+            json.Append(",\"panelX\":").Append(Number(settings?.PanelX ?? -1f));
+            json.Append(",\"panelY\":").Append(Number(settings?.PanelY ?? -1f));
+            json.Append(",\"panelCollapsed\":").Append(settings != null && settings.PanelCollapsed ? "true" : "false");
             return json.Append("}}").ToString();
         }
 

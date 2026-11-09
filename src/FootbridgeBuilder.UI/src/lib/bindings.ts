@@ -21,16 +21,19 @@ export function useToolState() {
 }
 
 export type Action = "toggleTool" | "close" | "build";
-export type TextTrigger = "setDesign" | "setPath";
+export type TextTrigger = "setDesign" | "setPath" | "openLink";
 export type NumberTrigger = "setReach" | "setExtraClearance" | "setTurn";
-export type ToggleTrigger = "setRemoveCrossings";
+export type ToggleTrigger = "setRemoveCrossings" | "setPanelCollapsed";
+export type PlaceTrigger = "setPanelPlace";
 export function act(name: Action): void;
 export function act(name: TextTrigger, value: string): void;
 export function act(name: NumberTrigger, value: number): void;
 export function act(name: ToggleTrigger, value: boolean): void;
-export function act(name: Action | TextTrigger | NumberTrigger | ToggleTrigger, value?: string | number | boolean): void {
+export function act(name: PlaceTrigger, x: number, y: number): void;
+export function act(name: Action | TextTrigger | NumberTrigger | ToggleTrigger | PlaceTrigger, value?: string | number | boolean, second?: number): void {
     try {
         if (value === undefined) trigger(GROUP, name);
+        else if (second !== undefined) trigger(GROUP, name, value, second);
         else trigger(GROUP, name, value);
     } catch (error) { console.error(`[FootbridgeBuilder] Trigger ${name} failed`, error); }
 }

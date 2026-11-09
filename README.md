@@ -3,22 +3,24 @@
 <img align="right" src="src/FootbridgeBuilder/Properties/Thumbnail.png" alt="Footbridge Builder" width="260">
 
 <a href="https://mods.paradoxplaza.com/authors/TevBenji/cities_skylines_2"><img alt="Paradox Mods: Footbridge Builder" src="https://img.shields.io/badge/Paradox%20Mods-Footbridge%20Builder-2ea44f"></a>
-<img alt="Version" src="https://img.shields.io/badge/version-0.3.0-1f6feb">
+<img alt="Version" src="https://img.shields.io/badge/version-0.4.0-1f6feb">
 <img alt="Game version" src="https://img.shields.io/badge/Cities%3A%20Skylines%20II-1.6-0e7490">
 <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0-c2410c"></a>
 
-A Cities: Skylines II mod that puts a working pedestrian bridge over a road in one click.
+A Cities: Skylines II mod that plans a working pedestrian bridge over the road you point at, and builds it when you say so.
 
 Building a footbridge by hand takes three mods and a lot of fiddling, and then the cims cross at street level anyway.
 **Footbridge Builder does it for you.** Hover a road and the bridge appears, as low as the game allows, with ramps that fit
-beside the road and feet that join the sidewalk. A green outline means it fits. Click, and it's built. Hover the middle of
-a junction or roundabout instead, and one bridge goes round it, over every road there.
+beside the road and feet that join the sidewalk. A green outline means it fits. Click to pin it, adjust it in the panel,
+and press **Build**. Hover the middle of a junction or roundabout instead, and one bridge goes round it, over every road
+there.
 
 <a href="#features">Features</a> ·
 <a href="#how-to-use">How to use</a> ·
 <a href="#settings">Settings</a> ·
 <a href="#will-cims-use-it">Will cims use it?</a> ·
 <a href="#how-it-works">How it works</a> ·
+<a href="#found-a-bug">Found a bug?</a> ·
 <a href="#building-from-source">Building from source</a> ·
 <a href="#credits">Credits</a>
 
@@ -43,7 +45,7 @@ In the game:
 
 ## Features
 
-- **One click, no other mods.** No Anarchy, no Move It. The bridge is the game's own footpath on the game's own pillars,
+- **No other mods.** No Anarchy, no Move It. The bridge is the game's own footpath on the game's own pillars,
   and you can bulldoze it like anything else.
 - **See it before you build.** The preview is made of the game's own temporary nets, so you see the pillars, the price and
   anything the game would refuse. A **green outline** means it fits; where nothing fits, the bridge shows in **red** with
@@ -89,16 +91,24 @@ the game's mod browser, and restart the game. It needs no other mods.
    already cross. **Hover the middle of a junction or a roundabout** for a ring over every road there.
 3. **Read the outline.** Green: it fits. Red: nothing fits here, and the panel says what's in the way. Move along the road,
    or turn it with <kbd>[</kbd> and <kbd>]</kbd>.
-4. **Click** (or press the green **Build** button). The panel reports what was built: pieces, sidewalk joins, crossings
-   removed and the cost.
+4. **Click the road to pin the bridge.** It stays put while you go to the panel, with a heavier outline and **Pinned** in
+   the panel. Change the design or any setting and it's planned again where it stands, green or red with the reasons. A red
+   bridge can be pinned too, so you can try other designs at that spot. Clicking another road moves the pin there.
+5. **Press the green Build button** in the panel. Clicking the map never builds. The panel reports what was built: pieces,
+   sidewalk joins, crossings removed and the cost.
 
 | Control | Action |
 |---|---|
 | Hover a road | Plan a bridge there |
 | Hover the middle of a junction or roundabout | Plan a ring over every road there |
-| Left-click | Build it, when the outline is green |
+| Left-click a road | Pin the bridge there; on another road, the pin moves there |
+| **Build** in the panel | Build the pinned bridge, when the outline is green |
 | <kbd>[</kbd> <kbd>]</kbd> | Turn the bridge 5° at a time, up to 30° each way |
-| <kbd>Esc</kbd> | Clear the bridge; press again to close the tool |
+| Right-click | Unpin and go back to hovering |
+| <kbd>Esc</kbd> | Unpin or clear the bridge; press again to close the tool |
+| Drag the panel's header | Move the panel anywhere; double-click the header to put it back |
+| Arrow in the panel's header | Fold the panel to its header, and open it again; the tool keeps working |
+| Bug and chat icons in the panel's header | Report a bug on GitHub; open the Discord |
 
 > [!IMPORTANT]
 > When no spot nearby is clear of buildings, the button says how many the bridge replaces, as the game's road tool does.
@@ -108,7 +118,8 @@ the game's mod browser, and restart the game. It needs no other mods.
 
 | What you see | Meaning |
 |---|---|
-| Green outline | The bridge fits here: click to build it |
+| Green outline | The bridge fits here: click to pin it, then press **Build** |
+| Heavier outline | The bridge is pinned, and stays where it is |
 | Red bridge, no preview | Nothing fits here; the panel says what's in the way |
 | Red outline round the preview | The game refuses part of it here; the panel names the game's reason |
 
@@ -185,7 +196,7 @@ a slope an uphill ramp comes out shorter than a downhill one. A short bend on th
 sidewalk. Every shape is checked against what stands nearby, and each design is scored by how many cims will use it.
 
 The tool then hands the plan to the game as temporary nets: the same pieces the game's own net tool makes, each with its
-own height. The game draws the preview, prices it, builds it on your click, and the mod checks what was built.
+own height. The game draws the preview, prices it, builds it when you press **Build**, and the mod checks what was built.
 
 ## Known limitations
 
@@ -198,8 +209,11 @@ own height. The game draws the preview, prices it, builds it on your click, and 
   city-wide pathfinding; if you want cims to never jaywalk, a mod like Stop Jaywalking does that.
 - English only.
 
-Found a problem? [Open an issue](https://github.com/TevBenji/Footbridge-Builder/issues) with a screenshot and the log at
-`%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Logs\FootbridgeBuilder.log`.
+## Found a bug?
+
+Press **Report a bug** at the bottom of the panel, or [open an issue on GitHub](https://github.com/TevBenji/Footbridge-Builder/issues), with a screenshot and the log at
+`%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Logs\FootbridgeBuilder.log`. Or tell me on
+[Discord](https://discord.com/channels/263634513861541888/1568265920902594560).
 
 ## Building from source
 

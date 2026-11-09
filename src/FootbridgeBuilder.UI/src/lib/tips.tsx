@@ -19,6 +19,8 @@ export const SETTING_TIPS: Record<string, string> = {
     "Deck height": "The deck's height above the road: the lowest the game allows plus the extra clearance.",
     "Cost": "What the game charges for these pieces, read from its own price for the preview.",
     "Crossings removed": "Marked crosswalks in reach that lose their crosswalk when you build.",
+    "Report a bug": "Opens a new issue on GitHub. Add a screenshot and your FootbridgeBuilder.log.",
+    "Discord": "Questions, ideas and news.",
 };
 
 export function SettingTip({ label, children }: { label?: string; children: React.ReactElement }) {
@@ -34,7 +36,7 @@ export function ToolbarTip({ children }: { children: React.ReactElement }) {
     if (!ui.Tooltip) return children;
     return <ui.Tooltip direction="up" delayTime={250} tooltip={<div className={styles.tip}>
         <strong>Footbridge Builder</strong>
-        <div>Hover a road and click to put a footbridge over it, or hover the middle of a junction or roundabout for a ring over every road there.</div>
+        <div>Hover a road and click to pin a footbridge there, then press Build in the panel. Hover the middle of a junction or roundabout for a ring over every road there.</div>
         <div className={styles.hotkey}>Ctrl+Shift+F</div>
     </div>}>{children}</ui.Tooltip>;
 }

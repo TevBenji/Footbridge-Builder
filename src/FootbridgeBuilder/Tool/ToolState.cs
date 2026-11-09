@@ -2,7 +2,7 @@
 namespace FootbridgeBuilder.Tool
 {
     /// <summary>
-    /// Closed: the tool is not active. Hovering: waiting for a road under the cursor. Planned: a bridge is shown and can be built.
+    /// Closed: the tool is not active. Hovering: waiting for a road under the cursor. Planned: a bridge is shown; pinned, it can be built.
     /// Building, Built, Failed: the build and its result.
     /// </summary>
     public enum ToolStage { Closed, Hovering, Planned, Building, Built, Failed }
@@ -36,6 +36,8 @@ namespace FootbridgeBuilder.Tool
         /// <summary>Pieces the game itself refuses (its red errors on the ghost).</summary>
         public int Refused;
         public float Turn;
+        /// <summary>The bridge is held in place for the panel; only then can it be built.</summary>
+        public bool Pinned;
 
         // The paths to choose from.
         public string[] PathNames = new string[0];

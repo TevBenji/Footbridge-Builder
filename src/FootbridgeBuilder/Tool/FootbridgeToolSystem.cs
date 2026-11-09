@@ -1,11 +1,12 @@
 // Footbridge Builder. Original work by TevBenji, 2026-11. GPL-3.0.
 //
-// The tool: hover a road, see the bridge, click to build it.
+// The tool: hover a road, see the bridge, click to pin it, adjust it in the panel, build it from there.
 //  * Hover: a net raycast finds the road; the world round it is copied (SiteSnapshot) and planned on a worker thread, the
 //    latest request winning.
 //  * Ghost: the plan goes out as real temporary nets. One Clear frame wipes the old ghost, the next frame emits the new one,
 //    and the game draws it with its pillars, its errors and its price, as for its own tools.
-//  * Build: a fresh snapshot is compared first (something may have changed); then Apply, then the crossing upgrades as a
+//  * Pin: a left-click holds the bridge where it is, so the pointer can go to the panel. Every setting then re-plans it there.
+//  * Build: only the panel's button; a fresh snapshot is compared first (something may have changed); then Apply, then the crossing upgrades as a
 //    second Apply, then a check of what the game actually built: pieces by their end points, feet by the sidewalk's side
 //    connection, crossings by the node's crosswalk flag, cost by the city's money.
 using System;
@@ -71,6 +72,14 @@ namespace FootbridgeBuilder.Tool
         private PathKind planPath;
         private float3 planHit;
         private float turn;
+        // The road and point of the latest request, which is where a pinned bridge stays.
+        private Entity requestedEdge;
+        private float3 requestedPoint;
+
+        // A left-click pins the bridge. Only the panel's Build button builds it, so a click meant to open the settings can't
+        // spend the city's money. Clicks are latched because input waits on the ghost's own frames.
+        private bool pinned, leftClicked, rightClicked;
+        private readonly RightClickGesture rightClick = new RightClickGesture();
 
         // The ghost on show.
         private readonly List<Entity> ghost = new List<Entity>();
@@ -105,6 +114,7 @@ namespace FootbridgeBuilder.Tool
 
         // For the local test runner (Dev build only): a hover and a click without the mouse.
         internal bool DevHovering { get; set; }
+        internal bool DevEscape { get; set; }
         internal Entity DevEdge { get; set; }
         internal float3 DevPoint { get; set; }
         /// <summary>A build asked for from the panel's button (or the test runner), handled on the next frame.</summary>
@@ -199,7 +209,10 @@ namespace FootbridgeBuilder.Tool
             catch (Exception exception) { Fail(exception, "The footbridge tool could not close."); }
         }
 
-        public void Build() => BuildRequested = true;
+        public void Build()
+        {
+            if (pinned) BuildRequested = true;
+        }
 
         public void SettingsChanged()
         {
@@ -246,6 +259,7 @@ namespace FootbridgeBuilder.Tool
                 EnableActions(false);
                 planCancel?.Cancel();
                 planTask = null;
+                ClearPin();
                 NetDefinitions.Destroy(EntityManager, ghost);
                 NetDefinitions.Destroy(EntityManager, upgrades);
                 plan = null;
@@ -295,25 +309,49 @@ namespace FootbridgeBuilder.Tool
                     Touch();
                     return inputDependencies;
                 }
-                if (GhostTick(frame)) return inputDependencies;
                 var input = InputManager.instance;
-                if (input == null || input.hasInputFieldFocus) return inputDependencies;
+                bool typing = input == null || input.hasInputFieldFocus;
+                if (!typing) LatchClicks(input);
+                if (GhostTick(frame) || typing) return inputDependencies;
                 HandleInput(input, frame);
             }
             catch (Exception exception) { LogUpdateError(exception, "Footbridge Builder: tool update failed"); }
             return inputDependencies;
         }
 
+        private void LatchClicks(InputManager input)
+        {
+            var mouse = Mouse.current;
+            bool overWorld = input.controlOverWorld;
+            leftClicked |= overWorld && ((applyAction != null && applyAction.WasPressedThisFrame()) || (mouse != null && mouse.leftButton.wasPressedThisFrame));
+            if (mouse == null) return;
+            // Dragging with the right button turns the camera: only a quick click counts.
+            rightClicked |= rightClick.Update(overWorld && mouse.rightButton.wasPressedThisFrame, mouse.rightButton.isPressed, mouse.delta.ReadValue(),
+                overWorld, UnityEngine.Time.realtimeSinceStartup);
+        }
+
         private void HandleInput(InputManager input, int frame)
         {
+            bool click = leftClicked, unpin = rightClicked;
+            leftClicked = rightClicked = false;
             var mouse = Mouse.current;
             var keyboard = Keyboard.current;
             bool overWorld = input.controlOverWorld;
             // The game's cancel action also fires on the right button, which belongs to the camera.
             bool rightButton = mouse != null && (mouse.rightButton.isPressed || mouse.rightButton.wasPressedThisFrame);
-            bool escape = (cancelAction != null && cancelAction.WasPressedThisFrame() && !rightButton) || (keyboard != null && keyboard.escapeKey.wasPressedThisFrame);
+            bool escape = (cancelAction != null && cancelAction.WasPressedThisFrame() && !rightButton) || (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) || DevEscape;
+            DevEscape = false;
+            bool onRoad = RoadUnderPointer(overWorld, out Entity edge, out float3 point);
             if (escape)
             {
+                if (pinned)
+                {
+                    // Nothing stays on show, even with the pointer on the road, so the next Esc closes the tool.
+                    ClearPin();
+                    suppressedKey = onRoad ? KeyFor(edge, point) : requestedKey;
+                    DropPlan();
+                    return;
+                }
                 // Esc drops the bridge on show; again, it closes the tool.
                 if (plan != null || ghost.Count > 0) { suppressedKey = requestedKey; DropPlan(); return; }
                 Close();
@@ -321,8 +359,17 @@ namespace FootbridgeBuilder.Tool
             }
             if (keyboard != null && keyboard.leftBracketKey.wasPressedThisFrame) { SetTurn(turn - TurnStep); return; }
             if (keyboard != null && keyboard.rightBracketKey.wasPressedThisFrame) { SetTurn(turn + TurnStep); return; }
+            if (unpin && pinned) { ClearPin(); return; }
+            if (pinned)
+            {
+                // The road went (bulldozed, or upgraded into a new one): there is nothing left to hold on to.
+                if (!SiteSnapshot.IsGroundRoad(EntityManager, requestedEdge, out _)) { ClearPin(); requestedKey = ""; DropPlan(); return; }
+                // A new design or setting: plan again where the bridge stands.
+                string pinnedKey = KeyFor(requestedEdge, requestedPoint);
+                if (pinnedKey != requestedKey) RequestPlan(requestedEdge, requestedPoint, pinnedKey);
+            }
             // A setting changed (from the panel, with the pointer off the road): plan again where the bridge was.
-            if (requestedKey.Length == 0 && plan != null && planSnapshot != null && !DevHovering
+            else if (requestedKey.Length == 0 && plan != null && planSnapshot != null && !DevHovering
                 && SiteSnapshot.IsGroundRoad(EntityManager, planSnapshot.Edge, out _))
                 RequestPlan(planSnapshot.Edge, planHit, KeyFor(planSnapshot.Edge, planHit));
             // The panel's button: the pointer is over the panel then, not the road, so this comes before the hover.
@@ -333,21 +380,13 @@ namespace FootbridgeBuilder.Tool
                 return;
             }
 
-            Entity edge = Entity.Null;
-            float3 point = default;
-            bool hovering;
-            if (DevHovering) { edge = DevEdge; point = DevPoint; hovering = true; }
-            else
+            if (pinned)
             {
-                RaycastHit hit = default;
-                hovering = overWorld && GetRaycastResult(out edge, out hit) && math.all(math.isfinite(hit.m_HitPosition));
-                point = hovering ? hit.m_HitPosition : default;
+                // Another road or another spot: the pin moves there. A click never builds, even on the pinned bridge.
+                if (click && onRoad) PinAt(edge, point);
+                return;
             }
-            if (hovering && EntityManager.HasComponent<Temp>(edge)) edge = EntityManager.GetComponentData<Temp>(edge).m_Original;
-            // Over the middle of a junction the raycast can name the junction's node: plan from one of its roads at the same
-            // point, which puts the ring round that junction.
-            if (hovering && EntityManager.HasComponent<Node>(edge) && !EntityManager.HasComponent<Edge>(edge)) edge = RoadAt(edge);
-            if (!hovering || !SiteSnapshot.IsGroundRoad(EntityManager, edge, out _))
+            if (!onRoad)
             {
                 if (plan != null && !DevHovering && overWorld) { requestedKey = ""; DropPlan(); }
                 return;
@@ -363,8 +402,43 @@ namespace FootbridgeBuilder.Tool
             if (key != requestedKey && key != suppressedKey && UnityEngine.Time.realtimeSinceStartup - requestedAt > 0.12f)
                 RequestPlan(edge, point, key);
 
-            bool click = overWorld && ((applyAction != null && applyAction.WasPressedThisFrame()) || (mouse != null && mouse.leftButton.wasPressedThisFrame));
-            if (click) TryBuild(frame);
+            if (click) PinAt(edge, point);
+        }
+
+        private bool RoadUnderPointer(bool overWorld, out Entity edge, out float3 point)
+        {
+            edge = Entity.Null;
+            point = default;
+            if (DevHovering) { edge = DevEdge; point = DevPoint; }
+            else
+            {
+                if (!overWorld || !GetRaycastResult(out edge, out RaycastHit hit) || !math.all(math.isfinite(hit.m_HitPosition))) return false;
+                point = hit.m_HitPosition;
+            }
+            if (EntityManager.HasComponent<Temp>(edge)) edge = EntityManager.GetComponentData<Temp>(edge).m_Original;
+            // Over the middle of a junction the raycast can name the junction's node: plan from one of its roads at the same
+            // point, which puts the ring round that junction.
+            if (EntityManager.HasComponent<Node>(edge) && !EntityManager.HasComponent<Edge>(edge)) edge = RoadAt(edge);
+            return SiteSnapshot.IsGroundRoad(EntityManager, edge, out _);
+        }
+
+        private void PinAt(Entity edge, float3 point)
+        {
+            pinned = State.Pinned = true;
+            suppressedKey = "";
+            reportAt = null;
+            string key = KeyFor(edge, point);
+            // The same key with nothing on show: Esc dropped this bridge, and the click asks for it back.
+            if (key != requestedKey || (plan == null && planTask == null)) RequestPlan(edge, point, key);
+            Touch();
+        }
+
+        private void ClearPin()
+        {
+            pinned = State.Pinned = false;
+            leftClicked = rightClicked = false;
+            rightClick.Reset();
+            Touch();
         }
 
         /// <summary>A road on the ground meeting at the node, or Null.</summary>
@@ -385,7 +459,7 @@ namespace FootbridgeBuilder.Tool
             // A newer bridge is still being planned (a move, a turn or a setting): the build waits for that one.
             if (planTask != null || plannedKey != requestedKey)
             {
-                Message("Updating the bridge to the new settings. Click again in a moment.");
+                Message("Updating the bridge to the new settings. Press Build again in a moment.");
                 return;
             }
             if (!plan.Buildable) { Message(plan.Messages.Count > 0 ? plan.Messages[0] : "No bridge fits here."); return; }
@@ -419,6 +493,8 @@ namespace FootbridgeBuilder.Tool
         private void RequestPlan(Entity edge, float3 point, string key)
         {
             requestedKey = key;
+            requestedEdge = edge;
+            requestedPoint = point;
             requestedAt = UnityEngine.Time.realtimeSinceStartup;
             var settings = Mod.Settings;
             var path = PathCatalog.Find(paths, settings?.PathName ?? PathCatalog.DefaultName);
@@ -559,7 +635,9 @@ namespace FootbridgeBuilder.Tool
                 if (plan.Buildable && !settled) return;
                 bool fits = plan.Buildable && State.Refused == 0;
                 var colour = fits ? Fits : DoesNotFit;
-                var fill = new UnityEngine.Color(colour.r, colour.g, colour.b, 0.25f);
+                var fill = new UnityEngine.Color(colour.r, colour.g, colour.b, pinned ? 0.45f : 0.25f);
+                // A pinned bridge has a heavier outline, so it reads as held in place.
+                float line = pinned ? 1.2f : 0.6f;
                 // Clear of the game's own blue outline round the ghost, so the green (or red) reads as a ring round it.
                 float half = (planPath?.Spec.Width ?? 3f) * 0.5f + 0.9f;
                 var buffer = overlay.GetBuffer(out JobHandle dependencies);
@@ -581,22 +659,22 @@ namespace FootbridgeBuilder.Tool
                         float3 side = math.normalizesafe(new float3(-tangent.z, 0f, tangent.x)) * half;
                         if (step > 0)
                         {
-                            Edge(buffer, colour, style, lastLeft, at + side);
-                            Edge(buffer, colour, style, lastRight, at - side);
+                            Edge(buffer, colour, style, lastLeft, at + side, line);
+                            Edge(buffer, colour, style, lastRight, at - side, line);
                         }
                         lastLeft = at + side;
                         lastRight = at - side;
                     }
                     // Across each ramp's foot, closing the outline there.
-                    if (plan.Nodes[piece.End].GroundEnd) Edge(buffer, colour, style, lastLeft, lastRight);
+                    if (plan.Nodes[piece.End].GroundEnd) Edge(buffer, colour, style, lastLeft, lastRight, line);
                 }
             }
             catch (Exception exception) { LogUpdateError(exception, "Footbridge Builder: drawing the outline failed"); }
         }
 
         private static void Edge(Game.Rendering.OverlayRenderSystem.Buffer buffer, UnityEngine.Color colour,
-            Game.Rendering.OverlayRenderSystem.StyleFlags style, float3 from, float3 to) =>
-            buffer.DrawLine(colour, colour, 0f, style, new Line3.Segment(from, to), 0.6f, new float2(1f, 1f));
+            Game.Rendering.OverlayRenderSystem.StyleFlags style, float3 from, float3 to, float width) =>
+            buffer.DrawLine(colour, colour, 0f, style, new Line3.Segment(from, to), width, new float2(1f, 1f));
 
         /// <summary>True when this frame belongs to the ghost (a Clear or an emission), so input waits.</summary>
         private bool GhostTick(int frame)
@@ -707,7 +785,7 @@ namespace FootbridgeBuilder.Tool
             if (fresh == null || fresh.Fingerprint != planSnapshot.Fingerprint)
             {
                 requestedKey = "";
-                Message("Something changed here. Check the new bridge and click again.");
+                Message("Something changed here. Check the new bridge and press Build again.");
                 return;
             }
             // A new build's own report replaces the note about the one before.
@@ -995,6 +1073,7 @@ namespace FootbridgeBuilder.Tool
             step = Step.None;
             plan = null;
             settled = false;
+            ClearPin();
             // The ghost became the bridge: nothing is left to settle, so the report isn't overwritten by a read of no ghost.
             emittedFrame = -1;
             reportAt = planHit.xz;
@@ -1028,6 +1107,7 @@ namespace FootbridgeBuilder.Tool
                 ghost.Clear();
                 upgrades.Clear();
                 step = Step.None;
+                ClearPin();
                 interrupted = "";
                 reportAt = null;
                 State.Stage = ToolStage.Closed;
