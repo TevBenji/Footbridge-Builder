@@ -455,9 +455,10 @@
 
 .listItem.selected { background-color: rgba(255, 255, 255, 0.16); }
 
-/* The design list: each shape's picture in a small box, across the panel's full width. */
+/* The design list: each shape's picture in a small box, across the panel's full width. Tall enough for every row: Gameface
+   ignores max-height: none, which left the last row spilling over the next setting. */
 .listPictures {
-    max-height: none;
+    max-height: 400rem;
     margin-left: 0;
 }
 
