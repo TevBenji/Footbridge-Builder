@@ -3,7 +3,7 @@
 <img align="right" src="src/FootbridgeBuilder/Properties/Thumbnail.png" alt="Footbridge Builder" width="260">
 
 <a href="https://mods.paradoxplaza.com/authors/TevBenji/cities_skylines_2"><img alt="Paradox Mods: Footbridge Builder" src="https://img.shields.io/badge/Paradox%20Mods-Footbridge%20Builder-2ea44f"></a>
-<img alt="Version" src="https://img.shields.io/badge/version-0.4.0-1f6feb">
+<img alt="Version" src="https://img.shields.io/badge/version-0.4.1-1f6feb">
 <img alt="Game version" src="https://img.shields.io/badge/Cities%3A%20Skylines%20II-1.6-0e7490">
 <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0-c2410c"></a>
 

@@ -5,7 +5,7 @@
     <TargetFramework>net48</TargetFramework>
     <LangVersion>9.0</LangVersion>
     <!-- Keep in step with ModVersion in Properties/PublishConfiguration.xml: the game's mod list shows this one. -->
-    <Version>0.4.0</Version>
+    <Version>0.4.1</Version>
     <Nullable>disable</Nullable>
     <OutputType>Library</OutputType>
     <AssemblyName>FootbridgeBuilder</AssemblyName>

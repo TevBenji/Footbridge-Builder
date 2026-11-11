@@ -55,9 +55,9 @@ Inspired by kianzarrin's Automatic Pedestrian Bridge Builder for the first game.
 	<Screenshot Value="Properties/Screenshots/05.png" />
 	<Screenshot Value="Properties/Screenshots/06.png" />
 	<Tag Value="Code Mod" />
-	<ModVersion Value="0.4.0" />
+	<ModVersion Value="0.4.1" />
 	<GameVersion Value="1.6.*" />
-	<ChangeLog Value="- Clicking a road no longer builds straight away: the click pins the bridge, you adjust it in the panel, and the green Build button builds it. Right-click or Esc unpins.&#10;- A picture for each design in the design list.&#10;- Drag the panel's header to move the panel; double-click the header to put it back.&#10;- The arrow in the header folds the panel away; the tool keeps working.&#10;- Report a bug and Discord buttons in the panel." />
+	<ChangeLog Value="- Fixes a crash on Build: if a road the bridge changes was rebuilt while the bridge waited on screen, the game crashed applying it. The tool now plans the bridge again and asks you to press Build again.&#10;- The same check before the street crossings are removed: they are made again from the roads as they are now." />
 	<!--The forum thread whose replies show as the Discussion on the mod page-->
 	<ForumLink Value="https://forum.paradoxplaza.com/forum/threads/mod-footbridge-builder-one-click-pedestrian-bridges-discussion-feedback.1948815/" />
 	<ExternalLink Type="github" Url="https://github.com/TevBenji/Footbridge-Builder" />

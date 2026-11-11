@@ -92,9 +92,12 @@ namespace FootbridgeBuilder.Tool
         private bool settled;
 
         // The build.
-        private enum Step { None, Applied, CrossingsEmitted, CrossingsApplied }
+        private enum Step { None, Applied, CrossingsCleared, CrossingsEmitted, CrossingsApplied }
         private Step step;
         private int stepFrame;
+        // Crossing upgrades made again because a road they change was renewed before they could be applied.
+        private const int MostCrossingTries = 3;
+        private int crossingTries;
         private long moneyBefore;
         private int priced;
         private readonly List<Entity> upgrades = new List<Entity>();
@@ -253,7 +256,7 @@ namespace FootbridgeBuilder.Tool
                 {
                     interrupted = step == Step.Applied
                         ? "Another tool was picked while the last bridge was building: it wasn't checked, and the street crossings were left as they are."
-                        : step == Step.CrossingsEmitted
+                        : step == Step.CrossingsEmitted || step == Step.CrossingsCleared
                             ? "Another tool was picked while the last bridge was building: the street crossings were left as they are."
                             : "Another tool was picked while the last bridge was building, before its check finished.";
                     Mod.Logger.Warn("Footbridge Builder: " + interrupted);
@@ -780,11 +783,28 @@ namespace FootbridgeBuilder.Tool
 
         // ── building ──
 
+        /// <summary>
+        /// The first temporary whose original is gone, or Null. The ghost stays on show while the city runs, and a road it
+        /// changes can be renewed meanwhile (a foot joining the sidewalk renews the road's edges). The snapshot's fingerprint
+        /// compares positions, so a road renewed in place passes it. The game's Apply reads each temporary's original without
+        /// checking it is there, and a missing one crashed the game (a player's crash, 11 November 2026).
+        /// </summary>
+        private Entity MissingOriginal()
+        {
+            using (var temps = temporaries.ToComponentDataArray<Temp>(Allocator.Temp))
+                foreach (var temp in temps)
+                    if (temp.m_Original != Entity.Null && (!EntityManager.Exists(temp.m_Original) || EntityManager.HasComponent<Deleted>(temp.m_Original)))
+                        return temp.m_Original;
+            return Entity.Null;
+        }
+
         private void StartBuild(int frame)
         {
             // Something may have been built or bulldozed since the plan was made: compare a fresh snapshot first.
             var fresh = SiteSnapshot.Capture(EntityManager, Area(planHit.xz, fresh: true), planSnapshot.Edge, planHit, planPath, out _);
-            if (fresh == null || fresh.Fingerprint != planSnapshot.Fingerprint)
+            Entity gone = MissingOriginal();
+            if (gone != Entity.Null) Mod.Logger.Warn($"Footbridge Builder: the bridge changes {gone}, which is gone; planning it again instead of building.");
+            if (fresh == null || fresh.Fingerprint != planSnapshot.Fingerprint || gone != Entity.Null)
             {
                 requestedKey = "";
                 Message("Something changed here. Check the new bridge and press Build again.");
@@ -792,6 +812,7 @@ namespace FootbridgeBuilder.Tool
             }
             // A new build's own report replaces the note about the one before.
             interrupted = "";
+            crossingTries = 0;
             moneyBefore = Money();
             priced = math.max(0, State.Cost);
             applyMode = ApplyMode.Apply;
@@ -814,16 +835,26 @@ namespace FootbridgeBuilder.Tool
                     piecesReport = VerifyPieces(out piecesMissing);
                     // An unfinished bridge leaves the street crossings as they are: cims still need a way across.
                     if (piecesMissing) { Finish("The street crossings were left as they are."); return; }
-                    EmitCrossings();
-                    if (upgrades.Count == 0) { Finish(""); return; }
-                    step = Step.CrossingsEmitted;
-                    stepFrame = frame;
-                    lastCount = -1;
-                    State.Progress = 0.7f;
-                    Touch();
+                    StartCrossings(frame);
+                    return;
+                case Step.CrossingsCleared:
+                    StartCrossings(frame);
                     return;
                 case Step.CrossingsEmitted:
                     if (!Settle(frame, stepFrame)) return;
+                    // A road the upgrades change was renewed while they settled: applying them would crash the game. They're
+                    // cleared now and made again next frame from the roads as they are then, a few times at most.
+                    Entity gone = MissingOriginal();
+                    if (gone != Entity.Null)
+                    {
+                        NetDefinitions.Destroy(EntityManager, upgrades);
+                        applyMode = ApplyMode.Clear;
+                        bool again = ++crossingTries < MostCrossingTries;
+                        Mod.Logger.Warn($"Footbridge Builder: a crossing upgrade changes {gone}, which is gone; {(again ? "making the upgrades again" : "leaving the crossings as they are")}.");
+                        if (again) step = Step.CrossingsCleared;
+                        else Finish("The street crossings were left as they are.");
+                        return;
+                    }
                     applyMode = ApplyMode.Apply;
                     step = Step.CrossingsApplied;
                     stepFrame = frame;
@@ -852,6 +883,17 @@ namespace FootbridgeBuilder.Tool
             both.Ends.AddRange(own.Ends);
             both.Ends.AddRange(beside.Ends);
             return both;
+        }
+
+        private void StartCrossings(int frame)
+        {
+            EmitCrossings();
+            if (upgrades.Count == 0) { Finish(""); return; }
+            step = Step.CrossingsEmitted;
+            stepFrame = frame;
+            lastCount = -1;
+            State.Progress = 0.7f;
+            Touch();
         }
 
         private void EmitCrossings()
