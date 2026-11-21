@@ -250,6 +250,11 @@ folder, into `%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\M
 | `src/FootbridgeBuilder.UI` | The panel: React and TypeScript, bundled for the game's UI |
 | `tools` | The Paradox Mods publishing script |
 
+## More mods by me
+
+- **[Big City Performance](https://mods.paradoxplaza.com/mods/166756/Windows)**: a million-person city runs at about normal speed instead of crawling.
+- **[Stepped Streets](https://mods.paradoxplaza.com/mods/166090/Windows)**: draw an area on a hillside and it builds a whole neighbourhood.
+
 ## Credits
 
 Footbridge Builder is made by [TevBenji](https://github.com/TevBenji). It was inspired by kianzarrin's **Automatic Pedestrian
